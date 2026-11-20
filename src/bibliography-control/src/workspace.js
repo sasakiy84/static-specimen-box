@@ -1,5 +1,5 @@
 import { FOLDER_MIME, validateFileId } from './drive.js';
-import { buildCatalogEntries_, serializeEntries_, extractId_, parseCatalogRows_, calculateMaState_ } from './catalog.js';
+import { buildCatalogEntries_, serializeEntries_, extractId_, parseCatalogRows_, calculateMaState_, catalogRevision } from './catalog.js';
 
 const directories = ['Bibs', 'Originals', 'Notes', 'Scripts'];
 const attachments = new Set(['Bibs', 'Originals', 'Notes']);
@@ -28,7 +28,19 @@ function fileUrl(file) {
 }
 
 function version(file) {
-  return [file.id, file.name, file.version, file.modifiedTime, file.size].join('\t');
+  return JSON.stringify([file.id, file.name, file.version, file.modifiedTime, file.size, file.mimeType, file.webViewLink]);
+}
+
+function hasVersion(file) {
+  return typeof file?.version === 'string' && file.version.length > 0;
+}
+
+function inputVersions(inputs) {
+  return JSON.stringify(Object.values(inputs).map(group => group.map(version).sort()));
+}
+
+function canMatchInputs(inputs) {
+  return Object.values(inputs).every(group => group.every(hasVersion));
 }
 
 function validateFilename(name) {
@@ -77,7 +89,20 @@ function csvRecords(text) {
   return rows;
 }
 
-export async function createWorkspace(drive, rootId) {
+function unpackBuild(record) {
+  if (!record || typeof record.content !== 'string' || !Array.isArray(record.bibVersions)) return null;
+  const catalog = parseCatalogRows_(csvRecords(record.content));
+  if (!catalog.schemaReady) return null;
+  return {
+    record,
+    catalog,
+    bibVersions: new Map(record.bibVersions),
+    // CSV の bib_source を使い、同じ本文をキャッシュへ二重に保存しない。
+    bibSources: new Map(catalog.entries.map(entry => [entry.bib_filename, entry.bib_source])),
+  };
+}
+
+export async function createWorkspace(drive, rootId, cache) {
   const root = await drive.get(rootId);
   if (root.trashed || root.mimeType !== FOLDER_MIME) throw new Error('文献管理用のフォルダを選択してください。');
   validateFileId(root.id);
@@ -87,6 +112,15 @@ export async function createWorkspace(drive, rootId) {
     const folder = single(rootChildren, name);
     if (folder.mimeType !== FOLDER_MIME) throw new Error(`${name} はフォルダである必要があります。`);
     folders[name] = folder;
+  }
+
+  let lastBuild;
+  let readingCache;
+
+  async function cachedBuild() {
+    if (lastBuild) return lastBuild;
+    readingCache ??= Promise.resolve().then(() => cache?.read()).then(unpackBuild).catch(() => null);
+    return readingCache;
   }
 
   async function getFolder(name, forCreate = false) {
@@ -105,12 +139,15 @@ export async function createWorkspace(drive, rootId) {
     return (await drive.list(folder.id)).filter(file => childOf(file, folder));
   }
 
-  async function ensureFile(name, id, editable = false) {
-    const folder = await getFolder(name);
+  async function ensureFileInFolder(folder, id, editable = false) {
     const file = await drive.get(id);
     if (!childOf(file, folder) || !isRegular(file)) throw new Error('ファイルの場所や種類が変わりました。');
     if (editable && !file.capabilities?.canEdit) throw new Error('このファイルには編集権限がありません。');
     return file;
+  }
+
+  async function ensureFile(name, id, editable = false) {
+    return ensureFileInFolder(await getFolder(name), id, editable);
   }
 
   async function targetCsv() {
@@ -137,26 +174,44 @@ export async function createWorkspace(drive, rootId) {
   }
 
   async function rebuild() {
-    const [inputs, csv] = await Promise.all([inspectInputs(), targetCsv()]);
-    // 一度に読む Bib の数を抑え、大きな一覧でも Drive API のリクエストを分散する。
-    const bibs = [];
-    for (let start = 0; start < inputs.bibs.length; start += 8) {
-      bibs.push(...await Promise.all(inputs.bibs.slice(start, start + 8).map(async file => {
-        const verified = await ensureFile('Bibs', file.id);
-        if (version(verified) !== version(file)) throw new Error('CSV の生成中に Bib が変更されました。');
-        return { name: file.name, url: fileUrl(file), modifiedAt: file.modifiedTime, content: await drive.read(file.id) };
-      })));
+    const [inputs, csv, previous] = await Promise.all([inspectInputs(), targetCsv(), cachedBuild()]);
+    const snapshot = inputVersions(inputs);
+    const csvVersion = hasVersion(csv) ? version(csv) : null;
+    const sameCsv = Boolean(csvVersion && previous?.record.csvVersion === csvVersion);
+    if (sameCsv && previous.record.revision === catalogRevision && previous.record.snapshot === snapshot) {
+      return { ...previous.catalog, modifiedAt: csv.modifiedTime || '', changed: false };
     }
+
+    const bodies = new Map();
+    const toRead = [];
+    for (const file of inputs.bibs) {
+      const savedBody = previous?.bibSources.get(file.name);
+      if (typeof savedBody === 'string' && hasVersion(file) && previous.bibVersions.get(file.id) === version(file)) {
+        bodies.set(file.id, savedBody);
+      } else {
+        toRead.push(file);
+      }
+    }
+    // 読み込み件数を抑えつつ、同じグループでは確認済みの Bibs フォルダを使う。
+    for (let start = 0; start < toRead.length; start += 8) {
+      const folder = await getFolder('Bibs');
+      await Promise.all(toRead.slice(start, start + 8).map(async file => {
+        const verified = await ensureFileInFolder(folder, file.id);
+        if (version(verified) !== version(file)) throw new Error('CSV の生成中に Bib が変更されました。');
+        bodies.set(file.id, await drive.read(file.id));
+      }));
+    }
+    const bibs = inputs.bibs.map(file => ({
+      name: file.name, url: fileUrl(file), modifiedAt: file.modifiedTime, content: bodies.get(file.id),
+    }));
     const entries = buildCatalogEntries_(bibs,
       inputs.originals.map(file => ({ name: file.name, url: fileUrl(file) })),
       inputs.notes.map(file => ({ name: file.name, url: fileUrl(file) })));
     const content = serializeEntries_(entries);
-    const current = csv ? await drive.read((await ensureFile('Scripts', csv.id)).id) : null;
+    const current = sameCsv ? previous.record.content : csv ? await drive.read((await ensureFile('Scripts', csv.id)).id) : null;
     const [fresh, freshCsv] = await Promise.all([inspectInputs(), targetCsv()]);
-    for (const name of Object.keys(inputs)) {
-      if (JSON.stringify(inputs[name].map(version).sort()) !== JSON.stringify(fresh[name].map(version).sort())) {
-        throw new Error('CSV の生成中に文献フォルダが変更されました。もう一度お試しください。');
-      }
+    if (snapshot !== inputVersions(fresh)) {
+      throw new Error('CSV の生成中に文献フォルダが変更されました。もう一度お試しください。');
     }
     if ((csv ? version(csv) : null) !== (freshCsv ? version(freshCsv) : null)) {
       throw new Error('CSV が生成中に変更されました。もう一度お試しください。');
@@ -172,7 +227,17 @@ export async function createWorkspace(drive, rootId) {
         saved = await drive.create(parent.id, csvName, content, csvMime);
       }
     }
-    return { ...parseCatalogRows_(csvRecords(content)), modifiedAt: saved.modifiedTime || '', changed: current !== content };
+    const record = {
+      revision: catalogRevision,
+      content,
+      csvVersion: hasVersion(saved) ? version(saved) : null,
+      snapshot: canMatchInputs(inputs) ? snapshot : null,
+      bibVersions: inputs.bibs.filter(hasVersion).map(file => [file.id, version(file)]),
+    };
+    lastBuild = unpackBuild(record);
+    try { await cache?.write(record); }
+    catch { /* IndexedDB を使えない場合は、同じ画面を開いている間だけキャッシュを使う。 */ }
+    return { ...lastBuild.catalog, modifiedAt: saved.modifiedTime || '', changed: current !== content };
   }
 
   async function filesFor(folder, id) {

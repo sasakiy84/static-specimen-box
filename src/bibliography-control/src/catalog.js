@@ -1,3 +1,6 @@
+// CSV の生成規則を変えたときは、この値を進めて前回の生成結果を再検証する。
+export const catalogRevision = 1;
+
 const CSV_COLUMNS = [
     'id', 'citekey', 'entrytype', 'title', 'author', 'date', 'year',
     'publication', 'publisher', 'volume', 'number', 'pages', 'doi',
@@ -7,7 +10,6 @@ const CSV_COLUMNS = [
 /** @typedef {{name: string, url: string}} CatalogFile */
 /** @typedef {{name: string, url: string, content: string, modifiedAt?: string}} BibSource */
 /** @typedef {Object<string, string>} CatalogEntry */
-// 生成規則を変えるときは改訂値を進め、入力が同じでも一度再生成する。
 function buildCatalogEntries_(bibs, originalFiles, noteFiles) {
     const originals = indexAttachments_(originalFiles);
     const notes = indexAttachments_(noteFiles);

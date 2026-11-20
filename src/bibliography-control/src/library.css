@@ -668,6 +668,7 @@ body.panel-open .toolbar {
 }
 #workspace-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
 .workspace-name { font-weight: 650; overflow-wrap: anywhere; margin: 0; }
+.workspace-name a { text-underline-offset: 3px; }
 #workspace-status, #workspace-error { margin: 8px 0 0; }
 #entry-message { margin: 0; padding: 8px 24px; border-bottom: 1px solid var(--border); }
 #entry-message:empty, #editable-notes:empty { display: none; }

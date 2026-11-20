@@ -92,12 +92,99 @@ test('leaves the CSV untouched when an input changes during generation', async (
   const [csv] = await drive.list('Scripts');
   const previous = await drive.read(csv.id);
   const bib = await workspace.findBib('MA0001');
+  await drive.update(bib.id, (await drive.read(bib.id)).replace('2024', '2028'), 'text/plain');
   const read = drive.read;
   drive.read = async id => {
     const text = await read(id);
-    if (id === bib.id) await drive.update(id, text.replace('2024', '2029'), 'text/plain');
+    if (id === bib.id) await drive.update(id, text.replace('2028', '2029'), 'text/plain');
     return text;
   };
   await assert.rejects(workspace.rebuild(), /生成中に文献フォルダが変更/);
   assert.equal(await drive.read(csv.id), previous);
+});
+
+function trackDriveCalls(drive) {
+  const calls = [];
+  for (const method of ['get', 'list', 'read', 'update', 'create']) {
+    const request = drive[method];
+    drive[method] = (...args) => {
+      calls.push({ method, id: args[0] });
+      return request(...args);
+    };
+  }
+  return calls;
+}
+
+test('checks Bibs once per batch and uses just eight metadata requests for an unchanged catalog', async () => {
+  const drive = demoDrive();
+  for (let number = 5; number <= 17; number++) {
+    const id = String(number).padStart(4, '0');
+    await drive.create('Bibs', 'MA' + id + '_sample.bib', '@misc{Key' + id + ', title={Sample}}', 'application/x-bibtex');
+  }
+  const workspace = await createWorkspace(drive, 'demo-root');
+  const calls = trackDriveCalls(drive);
+  const initial = await workspace.rebuild();
+  assert.equal(initial.entries.length, 17);
+  assert.equal(calls.filter(call => call.method === 'get' && call.id === 'Bibs').length, 5);
+  assert.equal(calls.filter(call => call.method === 'read').length, 17);
+
+  calls.length = 0;
+  assert.deepEqual(await workspace.rebuild(), { ...initial, changed: false });
+  assert.equal(calls.filter(call => call.method === 'get').length, 4);
+  assert.equal(calls.filter(call => call.method === 'list').length, 4);
+  assert.equal(calls.length, 8);
+});
+
+test('restores the previous build in a new workspace and reads only edited Bib files', async () => {
+  let record;
+  const cache = {
+    read: async () => structuredClone(record),
+    write: async value => { record = structuredClone(value); },
+  };
+  const drive = demoDrive();
+  const initial = await (await createWorkspace(drive, 'demo-root', cache)).rebuild();
+  const workspace = await createWorkspace(drive, 'demo-root', cache);
+  const calls = trackDriveCalls(drive);
+  assert.deepEqual(await workspace.rebuild(), { ...initial, changed: false });
+  assert.equal(calls.length, 8);
+
+  const bib = await workspace.findBib('MA0001');
+  await drive.update(bib.id, '@misc{Edited, title={Updated}, _notes={memo}}', 'application/x-bibtex');
+  calls.length = 0;
+  const rebuilt = await workspace.rebuild();
+  assert.equal(rebuilt.changed, true);
+  assert.equal(rebuilt.entries.find(entry => entry.id === 'MA0001').title, 'Updated');
+  assert.deepEqual(calls.filter(call => call.method === 'read'), [{ method: 'read', id: bib.id }]);
+
+  await drive.create('Originals', 'MA0001_example.pdf', 'example', 'application/pdf');
+  calls.length = 0;
+  const withAttachment = await workspace.rebuild();
+  assert.equal(withAttachment.changed, true);
+  assert.equal(withAttachment.entries.find(entry => entry.id === 'MA0001').originals[0].name, 'MA0001_example.pdf');
+  assert.equal(calls.filter(call => call.method === 'read').length, 0);
+});
+
+test('reads the published CSV again after an external edit', async () => {
+  const drive = demoDrive();
+  const workspace = await createWorkspace(drive, 'demo-root');
+  await workspace.rebuild();
+  const [csv] = await drive.list('Scripts');
+  const published = await drive.read(csv.id);
+  await drive.update(csv.id, published.replace('A notebook for reading research', 'External title'), 'text/csv');
+  const calls = trackDriveCalls(drive);
+
+  assert.equal((await workspace.rebuild()).changed, true);
+  assert.deepEqual(calls.filter(call => call.method === 'read'), [{ method: 'read', id: csv.id }]);
+  assert.equal(await drive.read(csv.id), published);
+});
+
+test('continues with the current page cache when browser storage is unavailable', async () => {
+  const unavailable = () => { throw new Error('Storage unavailable'); };
+  const drive = demoDrive();
+  const workspace = await createWorkspace(drive, 'demo-root', { read: unavailable, write: unavailable });
+  assert.equal((await workspace.rebuild()).changed, true);
+
+  const calls = trackDriveCalls(drive);
+  assert.equal((await workspace.rebuild()).changed, false);
+  assert.equal(calls.length, 8);
 });

@@ -5,6 +5,7 @@ import { googleConfig } from './google-config.js';
 import { authorize, loadIdentity, pickFolder, revoke } from './google-auth.js';
 import { createDrive, DriveError, folderIdFromLink, getAccessToken } from './drive.js';
 import { createWorkspace } from './workspace.js';
+import { browserCatalogCache } from './catalog-cache.js';
 import { demoDrive } from './demo.js';
 import { forgetDriveSession, loadDriveSession, saveDriveSession } from './drive-session.js';
 import { readRoute, pageUrl } from './routes.js';
@@ -102,6 +103,7 @@ function clearWorkspace({ reset = true } = {}) {
   resetFolderLink();
   setCatalog(null, reset && hadWorkspace);
   setText('workspace-name', '');
+  setWorkspaceFolder();
   setText('workspace-status', '');
   updateButtons();
 }
@@ -141,8 +143,17 @@ function resetFolderLink() {
   folderForm.reset();
 }
 
+function setWorkspaceFolder(root) {
+  const link = byId('workspace-folder');
+  link.hidden = !root;
+  link.textContent = root?.name || '';
+  if (root) link.href = 'https://drive.google.com/drive/folders/' + encodeURIComponent(root.id);
+  else link.removeAttribute('href');
+}
+
 async function selectWorkspace(drive, id, userId, isDemo = false) {
-  const next = await createWorkspace(drive, id);
+  const cache = isDemo ? undefined : browserCatalogCache(scopeKey(userId, id));
+  const next = await createWorkspace(drive, id, cache);
   let nextCatalog;
   try {
     nextCatalog = isDemo ? await next.rebuild() : await next.readCatalog();
@@ -155,8 +166,8 @@ async function selectWorkspace(drive, id, userId, isDemo = false) {
   workspace = { service: next, userId, isDemo };
   currentEntry = undefined;
   dirty = false;
-  const label = isDemo ? 'この画面内' : connected.user.displayName || 'Google Drive';
-  setText('workspace-name', `${next.root.name} · ${label}`);
+  setWorkspaceFolder(isDemo ? null : next.root);
+  setText('workspace-name', isDemo ? `${next.root.name} · この画面内` : ` · ${connected.user.displayName || 'Google Drive'}`);
   setCatalog(nextCatalog, reset);
   setText('workspace-status', nextCatalog.modifiedAt ? '' : '「一覧・CSV を更新」で文献一覧を生成できます。');
   resetFolderLink();
