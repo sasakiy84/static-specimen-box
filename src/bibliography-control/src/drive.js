@@ -30,11 +30,16 @@ export function folderIdFromLink(value) {
   throw new Error(message);
 }
 
+export async function getAccessToken(session) {
+  if (session.renew && Date.now() + 30_000 >= session.expiresAt) await session.renew();
+  if (Date.now() >= session.expiresAt) throw new DriveError(401, 'Google Drive の接続期限が切れました。再接続してください。');
+  return session.token;
+}
+
 export function createDrive(session, request = fetch) {
   async function send(url, options = {}) {
-    if (Date.now() >= session.expiresAt) throw new DriveError(401, 'Google Drive の接続期限が切れました。再接続してください。');
     const headers = new Headers(options.headers);
-    headers.set('Authorization', `Bearer ${session.token}`);
+    headers.set('Authorization', `Bearer ${await getAccessToken(session)}`);
     const response = await request(url, { ...options, headers, credentials: 'omit' });
     if (response.ok) return response;
     const message = {

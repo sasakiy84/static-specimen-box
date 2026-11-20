@@ -1,6 +1,7 @@
 import { LibraryCore } from './library-core.js';
 import { ReferenceFormats } from './citations.js';
 import { citationAssets } from './citation-assets.js';
+import { readRoute } from './routes.js';
 
 const names = { __proto__: null, article: '雑誌論文', inproceedings: '会議論文', conference: '会議論文', proceedings: '会議録', book: '書籍', inbook: '書籍の章', incollection: '論集所収', thesis: '学位論文', phdthesis: '博士論文', mastersthesis: '修士論文', online: 'オンライン資料', report: '報告書', misc: 'その他' };
 const byId = id => document.getElementById(id);
@@ -214,7 +215,7 @@ queryInput.addEventListener('keydown', event => {
     }
 });
 document.addEventListener('keydown', event => {
-    if (event.key === '/' && !document.querySelector('dialog[open]') && !event.altKey && !event.ctrlKey && !event.metaKey && !event.target.isContentEditable && !['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName)) {
+    if (event.key === '/' && readRoute().page === 'library' && !document.querySelector('dialog[open]') && !event.altKey && !event.ctrlKey && !event.metaKey && !event.target.isContentEditable && !['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName)) {
         event.preventDefault();
         queryInput.focus();
     }
@@ -235,7 +236,7 @@ function writePanelRoute(id, method, ownsSlot) {
     detailSlot = ownsSlot;
 }
 function applyPanelRoute() {
-    const id = new URL(location.href).searchParams.get('entry') || '';
+    const id = readRoute().page === 'library' ? new URL(location.href).searchParams.get('entry') : '';
     const entry = entriesById.get(id);
     if (entry) {
         if (!panel.open || selectedEntry?.id !== id) {
@@ -510,10 +511,10 @@ byId('show-licenses').addEventListener('click', async () => {
     }
 });
 byId('close-licenses').addEventListener('click', () => byId('license-panel').close());
-window.addEventListener('popstate', event => {
-    detailSlot = event.state?.libraryDetailSlot === true;
+export function syncLibraryRoute() {
+    detailSlot = history.state?.libraryDetailSlot === true;
     applyPanelRoute();
-});
+}
 
 export function setLibrary(next, { reset = false } = {}) {
     const currentTab = activeTab;

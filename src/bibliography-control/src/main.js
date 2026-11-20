@@ -1,11 +1,13 @@
 import './library.css';
 import '../formatter/formatter.css';
-import { setLibrary } from './library-view.js';
+import { setLibrary, syncLibraryRoute } from './library-view.js';
 import { googleConfig } from './google-config.js';
 import { authorize, loadIdentity, pickFolder, revoke } from './google-auth.js';
-import { createDrive, DriveError, folderIdFromLink } from './drive.js';
+import { createDrive, DriveError, folderIdFromLink, getAccessToken } from './drive.js';
 import { createWorkspace } from './workspace.js';
 import { demoDrive } from './demo.js';
+import { forgetServerSession, loginUrl, readAuthStatus, readServerSession, renewableSession } from './persistent-auth.js';
+import { readRoute, pageUrl } from './routes.js';
 import { discardDraft } from '../formatter/src/draft.ts';
 
 const byId = id => document.getElementById(id);
@@ -24,7 +26,9 @@ const attachButton = byId('attach-original');
 const noteButton = byId('new-note');
 const upload = byId('attachment-file');
 const editDialog = byId('edit-dialog');
-const formatterDialog = byId('formatter-dialog');
+const formatterPage = byId('formatter-page');
+const formatterRoot = byId('formatter-root');
+const routeLinks = [...document.querySelectorAll('a[data-route]')];
 const editSource = byId('edit-source');
 const googleEnabled = location.origin === googleConfig.origin || import.meta.env.DEV;
 const caption = new Intl.DateTimeFormat('ja-JP', {
@@ -37,8 +41,12 @@ let catalog;
 let currentEntry;
 let activeEdit;
 let formatter;
+let formatterContext;
+let formatterLoading;
+let promptLoading;
 let isBusy = false;
 let authReady = false;
+let persistentAuth = false;
 let dirty = false;
 
 function setText(id, message) {
@@ -60,7 +68,8 @@ function updateButtons() {
   byId('workspace-bar').hidden = !workspace;
   byId('attachment-actions').hidden = !workspace || !currentEntry;
   editButton.hidden = !workspace || !currentEntry;
-  for (const button of [disconnect, folderButton, demoButton, refresh, newEntry, editButton, attachButton, noteButton, byId('save-edit'), byId('close-edit'), byId('close-formatter')]) {
+  newEntry.setAttribute('aria-disabled', String(isBusy));
+  for (const button of [disconnect, folderButton, refresh, editButton, attachButton, noteButton, byId('save-edit'), byId('close-edit')]) {
     button.disabled = isBusy;
   }
 }
@@ -90,7 +99,7 @@ function clearWorkspace({ reset = true } = {}) {
   workspace = currentEntry = activeEdit = undefined;
   dirty = false;
   editDialog.close();
-  formatterDialog.close();
+  resetFormatter();
   resetFolderLink();
   setCatalog(null, reset && hadWorkspace);
   setText('workspace-name', '');
@@ -116,8 +125,8 @@ async function action(operation, errorTarget = 'workspace-error') {
       message += '。変換結果の先頭のカンマの前に引用キーを入力してください。';
     }
     setText(errorTarget, message);
-    if (errorTarget === 'formatter-message' && formatterDialog.open) byId(errorTarget).scrollIntoView({ block: 'nearest' });
-    if (expired || (errorTarget === 'formatter-message' && !formatterDialog.open) ||
+    if (errorTarget === 'formatter-message' && !formatterPage.hidden) byId(errorTarget).scrollIntoView({ block: 'nearest' });
+    if (expired || (errorTarget === 'formatter-message' && formatterPage.hidden) ||
         (errorTarget === 'edit-error' && !editDialog.open) || (errorTarget === 'entry-message' && !details.open)) {
       setText('workspace-error', message);
     }
@@ -152,23 +161,10 @@ async function selectWorkspace(drive, id, userId, isDemo = false) {
   setText('workspace-status', nextCatalog.modifiedAt ? '' : '「一覧・CSV を更新」で文献一覧を生成できます。');
   resetFolderLink();
   if (!isDemo) rememberFolder(userId, next.root.id);
+  if (readRoute().page === 'new') prepareFormatter();
 }
 
-async function readyIdentity() {
-  try {
-    await loadIdentity();
-    authReady = true;
-  } catch (error) {
-    setText('workspace-error', error.message);
-    authReady = true;
-  } finally {
-    updateButtons();
-  }
-}
-
-connect.addEventListener('click', () => action(async () => {
-  if (!globalThis.google?.accounts?.oauth2) await loadIdentity();
-  const session = await authorize();
+async function connectWith(session) {
   const drive = createDrive(session);
   const user = await drive.who();
   const reset = Boolean(workspace) && workspace.userId !== user.permissionId;
@@ -177,10 +173,48 @@ connect.addEventListener('click', () => action(async () => {
   setText('workspace-status', '文献管理フォルダを選択してください。');
   const previous = loadRememberedFolder(user.permissionId);
   if (previous) await selectWorkspace(drive, previous, user.permissionId);
+}
+
+async function restoreConnection() {
+  const result = await readServerSession();
+  persistentAuth = result.persistent;
+  if (result.unavailable) throw new Error('Google Drive に自動で再接続できませんでした。もう一度お試しください。');
+  if (result.expired) setText('workspace-status', 'Google Drive の接続期限が切れました。再接続してください。');
+  if (result.session && !readRoute().sample) await connectWith(renewableSession(result.session));
+  return result;
+}
+
+async function readyIdentity() {
+  try {
+    const { sample, page } = readRoute();
+    // サンプルを直接開いた場合も、接続設定だけは読み込んでおく。
+    const result = sample ? await readAuthStatus() : await restoreConnection();
+    persistentAuth = result.persistent;
+    if (!persistentAuth) await loadIdentity();
+    const url = new URL(location.href);
+    if (url.searchParams.has('auth')) {
+      url.searchParams.delete('auth');
+      history.replaceState(history.state, '', url);
+      setText(page === 'new' ? 'formatter-message' : 'workspace-error', 'Google Drive への接続を完了できませんでした。もう一度お試しください。');
+    }
+  } catch (error) {
+    setText(readRoute().page === 'new' ? 'formatter-message' : 'workspace-error', error.message);
+  } finally {
+    authReady = true;
+    updateButtons();
+  }
+}
+
+connect.addEventListener('click', () => action(async () => {
+  if (persistentAuth) {
+    location.assign(loginUrl(readRoute().page));
+    return;
+  }
+  if (!globalThis.google?.accounts?.oauth2) await loadIdentity();
+  await connectWith(await authorize());
 }));
 folderButton.addEventListener('click', () => action(async () => {
-  if (Date.now() >= connected.session.expiresAt) throw new DriveError(401, '接続期限が切れました。Google Drive に再接続してください。');
-  const id = await pickFolder(connected.session.token);
+  const id = await pickFolder(await getAccessToken(connected.session));
   if (id) await selectWorkspace(connected.drive, id, connected.user.permissionId);
 }));
 folderForm.addEventListener('submit', event => {
@@ -192,17 +226,16 @@ folderForm.addEventListener('submit', event => {
     folderLink.querySelector('summary').focus();
   });
 });
-disconnect.addEventListener('click', () => {
-  if (connected) revoke(connected.session.token);
+disconnect.addEventListener('click', () => action(async () => {
+  const wasSample = workspace?.isDemo;
+  if (connected?.session.id) await forgetServerSession(connected.session.id);
+  else if (connected) revoke(connected.session.token);
   connected = undefined;
   clearWorkspace();
-  setText('workspace-error', '');
-});
-demoButton.addEventListener('click', () => action(async () => {
-  if (workspace?.isDemo) return;
-  if (connected) revoke(connected.session.token);
-  connected = undefined;
-  await selectWorkspace(demoDrive(), 'demo-root', 'demo', true);
+  if (wasSample) {
+    navigate(pageUrl('library', false), true);
+    if (persistentAuth) await restoreConnection();
+  }
 }));
 
 refresh.addEventListener('click', () => action(async () => {
@@ -224,53 +257,148 @@ function afterWrite(message) {
   setText('entry-message', message);
 }
 
-newEntry.addEventListener('click', () => action(async () => {
+function resetFormatter() {
+  formatterContext = formatter = undefined;
+  formatterRoot.replaceChildren();
+  formatterRoot.hidden = true;
+  byId('formatter-unavailable').hidden = Boolean(workspace);
+  setText('formatter-prefix', '');
+  setText('formatter-message', '');
+}
+
+function prepareFormatter() {
   const context = workspace;
-  const [{ mountFormatter }, { default: html }, assigned] = await Promise.all([
+  if (!context || formatterContext === context) return;
+  if (formatterLoading?.context === context) return;
+  resetFormatter();
+  const request = { context };
+  formatterLoading = request;
+  setText('formatter-message', '文献 ID と登録フォームを準備しています…');
+  void Promise.all([
     import('../formatter/src/app.ts'),
     import('../formatter/form.html?raw'),
     context.service.nextNumber(),
-  ]);
-  const root = byId('formatter-root');
-  root.replaceChildren(document.createRange().createContextualFragment(html));
-  const key = `${scopeKey(context.userId, context.service.root.id)}:formatter-draft`;
-  const tags = [...new Set((catalog?.entries ?? []).flatMap(entry => entry.tags))];
-  let prefix = assigned.prefix;
-  setText('formatter-message', '');
-  setText('formatter-prefix', `文献ID ${assigned.nextId}`);
-  formatter = mountFormatter(root, {
-    prefix, tags, draftKey: key,
-    onSave: (bib, filename, pdf) => action(async () => {
-      const result = await context.service.createBib(prefix, filename, bib);
-      if (result.next) {
-        prefix = result.next.prefix;
-        formatter.setPrefix(prefix);
-        setText('formatter-prefix', `文献ID ${result.next.nextId}`);
-        setText('formatter-message', `採番が ${result.next.nextId} に変わりました。ファイル名を確認して、もう一度登録してください。`);
-        return;
-      }
-      let message = `${result.saved.name} を保存しました。`;
-      if (pdf) {
-        try { await context.service.uploadOriginal(prefix.slice(0, -1), pdf); }
-        catch (error) {
-          message += ` PDF の追加に失敗しました。一覧を更新したあと、文献の詳細から追加できます。 ${error.message}`;
+  ]).then(([{ mountFormatter }, { default: html }, assigned]) => {
+    if (workspace !== context || formatterLoading !== request) return;
+    formatterRoot.replaceChildren(document.createRange().createContextualFragment(html));
+    const key = `${scopeKey(context.userId, context.service.root.id)}:formatter-draft`;
+    const tags = [...new Set((catalog?.entries ?? []).flatMap(entry => entry.tags))];
+    let prefix = assigned.prefix;
+    setText('formatter-message', '');
+    setText('formatter-prefix', `文献 ID ${assigned.nextId}${context.isDemo ? ' · サンプル' : ''}`);
+    formatter = mountFormatter(formatterRoot, {
+      prefix, tags, draftKey: key, sample: context.isDemo,
+      onSave: (bib, filename, pdf) => action(async () => {
+        if (workspace !== context) return;
+        const result = await context.service.createBib(prefix, filename, bib);
+        if (result.next) {
+          prefix = result.next.prefix;
+          formatter.setPrefix(prefix);
+          setText('formatter-prefix', `文献 ID ${result.next.nextId}${context.isDemo ? ' · サンプル' : ''}`);
+          setText('formatter-message', `採番が ${result.next.nextId} に変わりました。ファイル名を確認して、もう一度登録してください。`);
+          return;
         }
-      }
-      discardDraft(key);
-      formatterDialog.close();
-      afterWrite(message);
-      setText('workspace-status', `${message} 「一覧・CSV を更新」で反映できます。`);
-    }, 'formatter-message'),
+        let message = `${result.saved.name} を保存しました。`;
+        if (pdf) {
+          try { await context.service.uploadOriginal(prefix.slice(0, -1), pdf); }
+          catch (error) {
+            message += ` PDF の追加に失敗しました。一覧を更新したあと、文献の詳細から追加できます。 ${error.message}`;
+          }
+        }
+        discardDraft(key);
+        resetFormatter();
+        afterWrite(message);
+        setText('workspace-status', `${message} 「一覧・CSV を更新」で反映できます。`);
+        if (readRoute().page === 'new') navigate(pageUrl('library', context.isDemo), true);
+      }, 'formatter-message'),
+    });
+    formatterContext = context;
+    formatterRoot.hidden = false;
+  }).catch(error => {
+    if (workspace !== context || formatterLoading !== request) return;
+    if (error instanceof DriveError && error.status === 401) {
+      connected = undefined;
+      clearWorkspace();
+    }
+    setText('formatter-message', error.message);
+  }).finally(() => {
+    if (formatterLoading === request) formatterLoading = undefined;
   });
-  formatterDialog.showModal();
-}));
-byId('close-formatter').addEventListener('click', () => formatterDialog.close());
-formatterDialog.addEventListener('cancel', event => { if (isBusy) event.preventDefault(); });
-formatterDialog.addEventListener('close', () => {
-  if (formatterDialog.open) return;
-  formatter = undefined;
-  byId('formatter-root').replaceChildren();
+}
+
+function preparePrompt() {
+  promptLoading ??= import('../formatter/prompt.txt?raw').then(({ default: prompt }) => {
+    byId('llm-prompt').textContent = prompt;
+    byId('copy-prompt').disabled = false;
+  }).catch(() => {
+    setText('prompt-status', 'プロンプトを読み込めませんでした。');
+    promptLoading = undefined;
+  });
+}
+
+byId('copy-prompt').disabled = true;
+byId('copy-prompt').addEventListener('click', async () => {
+  const prompt = byId('llm-prompt');
+  try {
+    await navigator.clipboard.writeText(prompt.textContent);
+    setText('prompt-status', 'コピーしました。');
+  } catch {
+    const range = document.createRange();
+    range.selectNodeContents(prompt);
+    const selection = getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    setText('prompt-status', '本文を選択しました。ブラウザのコピー操作でコピーしてください。');
+  }
 });
+
+function navigate(url, replace = false) {
+  history[replace ? 'replaceState' : 'pushState']({}, '', url);
+  void renderPage(true);
+}
+
+async function renderPage(focus = false) {
+  const route = readRoute();
+  const pages = document.querySelectorAll('main[data-page]');
+  for (const page of pages) page.hidden = page.dataset.page !== route.page;
+  for (const link of routeLinks) {
+    link.href = pageUrl(link.dataset.route, link.dataset.sample === 'true' || route.sample);
+  }
+  syncLibraryRoute();
+  const heading = document.querySelector(`[data-page="${route.page}"] [data-page-heading]`);
+  document.title = route.page === 'library' ? heading.textContent : `${heading.textContent} | 文献ライブラリ`;
+  if (focus) {
+    heading.focus({ preventScroll: true });
+    window.scrollTo(0, 0);
+  }
+
+  if (route.page === 'prompt') preparePrompt();
+  if (!route.sample && workspace?.isDemo) {
+    clearWorkspace();
+    if (persistentAuth) await action(restoreConnection);
+  }
+
+  if (route.sample && !workspace?.isDemo) {
+    await action(async () => {
+      if (connected && !connected.session.id) revoke(connected.session.token);
+      connected = undefined;
+      await selectWorkspace(demoDrive(), 'demo-root', 'demo', true);
+    }, route.page === 'new' ? 'formatter-message' : 'workspace-error');
+  }
+  if (readRoute().page === 'new') {
+    byId('formatter-unavailable').hidden = Boolean(workspace);
+    prepareFormatter();
+  }
+}
+
+document.addEventListener('click', event => {
+  const link = event.target.closest('a[data-route]');
+  if (!link || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  if (isBusy || link.href === location.href) return;
+  navigate(new URL(link.href));
+});
+window.addEventListener('popstate', () => void renderPage());
 
 function requireCurrentEntry() {
   if (!workspace || !currentEntry) throw new Error('対象の文献を開き直してください。');
@@ -281,6 +409,7 @@ function openEditor(data) {
   activeEdit = data;
   setText('edit-title', data.folder === 'Bibs' ? 'Bib を編集' : 'ノートを編集');
   setText('edit-file', data.file?.name || data.entryId);
+  byId('save-edit').textContent = workspace.isDemo ? 'サンプルに保存' : 'Drive に保存';
   setText('edit-error', '');
   editSource.value = data.content;
   editDialog.showModal();
@@ -368,5 +497,6 @@ byId('edit-form').addEventListener('submit', event => {
 });
 
 updateButtons();
+void renderPage();
 if (googleEnabled) void readyIdentity();
 else setText('workspace-status', 'Google Drive 接続は static-specimen-box.sasakiy84.net で利用できます。');

@@ -27,3 +27,15 @@ export const exampleBib = String.raw`@article{turing1936,
   year = 2024,
   _status = {to-read}
 }`;
+
+export const sampleBib = `@article{aoki2024,
+  author = {青木, 空 and 高橋, 凪},
+  title = {読書ノートから研究の問いを組み立てる},
+  journal = {文献整理の実践},
+  year = {2024},
+  volume = {12},
+  number = {2},
+  pages = {24--35},
+  _tags = {読解},
+  _notes = {レイアウト確認用の架空の文献です。}
+}`;

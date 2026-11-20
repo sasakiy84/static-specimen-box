@@ -1,0 +1,63 @@
+var e=`<section class="editor-card input-tools" aria-label="読み込みと言語">
+  <div class="file-tools">
+    <div class="editor-actions">
+      <label class="action-button file-trigger">.bib・PDF を開く<input id="file" type="file" accept=".bib,.bibtex,.pdf,text/plain,application/pdf"></label>
+      <button id="example" class="action-button" type="button">サンプルを入力</button>
+    </div>
+    <span id="formatter-file-name" class="updated" hidden></span>
+  </div>
+  <div class="language-tools">
+    <span id="language-label">文献の言語</span>
+    <div class="language-buttons" role="group" aria-labelledby="language-label">
+      <button id="language-japanese" class="action-button" type="button" aria-pressed="true">日本語</button>
+      <button id="language-english" class="action-button" type="button" aria-pressed="false">英語</button>
+      <button id="language-other" class="action-button" type="button" aria-pressed="false">その他</button>
+    </div>
+    <label id="other-language-label" hidden>言語名 <input id="other-language" type="text" autocomplete="off"></label>
+  </div>
+</section>
+<div class="editor-panes">
+  <section class="editor-card editor-pane" aria-labelledby="input-title">
+    <h2 id="input-title"><label for="source">入力する .bib</label></h2>
+    <textarea id="source" spellcheck="false" placeholder="@article{key,&#10;  author = {Smith, Jane},&#10;  title = {A Sample Article},&#10;  year = {2024},&#10;}"></textarea>
+    <div class="editor-actions">
+      <button id="convert" class="action-button primary-action" type="button">biblatex に変換</button>
+      <button id="clear" class="action-button" type="button">下書きを消去</button>
+    </div>
+  </section>
+  <section class="editor-card editor-pane" aria-labelledby="output-title">
+    <h2 id="output-title"><label for="output">変換した biblatex</label></h2>
+    <textarea id="output" spellcheck="false" placeholder="変換結果"></textarea>
+    <div class="editor-actions">
+      <button id="drive-save" type="button" class="action-button primary-action" disabled>Drive に登録</button>
+      <button id="copy" class="action-button" type="button" disabled>結果をコピー</button>
+      <button id="download" class="action-button" type="button" disabled>.bib をダウンロード</button>
+    </div>
+    <label id="drive-attach-label" class="attach-option" hidden><input id="drive-attach" type="checkbox"> 読み込んだ PDF を原文として保存</label>
+    <p id="status" role="status" class="editor-message"></p>
+  </section>
+</div>
+<section id="filename-section" class="editor-card formatter-metadata" aria-labelledby="filenames-title" hidden>
+  <div class="metadata-header"><h2 id="filenames-title">ファイル名</h2><button id="copy-names" class="action-button" type="button" hidden>すべてコピー</button></div>
+  <div id="filenames"></div>
+</section>
+<section id="editor-tools" class="editor-card formatter-metadata" aria-labelledby="fields-heading" hidden>
+  <h2 id="fields-heading">書誌情報の編集</h2>
+  <div id="entry-tools" aria-label="文献種別の編集"></div>
+  <fieldset id="tag-candidates" class="field-group" hidden>
+    <legend>タグ候補</legend>
+    <div id="tag-candidate-buttons" class="editor-actions"></div>
+    <p id="tag-candidate-reason" class="field-help" hidden>カンマを含むタグは、カンマ区切りの _tags に追加できません。</p>
+  </fieldset>
+  <div id="field-tools" hidden><div id="field-buttons" aria-label="フィールド操作"></div></div>
+</section>
+<ul id="warnings" class="editor-card formatter-warnings" aria-label="確認する項目"></ul>
+<details class="editor-card conversion-rules">
+      <summary>変換ルール</summary>
+      <p>PDF は文書情報と XMP メタデータから著者・タイトル・出版日・掲載誌・DOI を読み取って変換します。XMP を優先し、出版日のない PDF は年なしとして出力します。PDF の作成日・更新日は出版年として使いません。紙面からの推定や OCR は行いません。</p>
+      <p>LaTeX の大文字保護・数式を保持し、フィールド名・並び順・波括弧の形式を統一します。author・editor・translator などの人名フィールドは10人以内なら1行、11人以上なら人名ごとに改行します。journal → journaltitle、school → institution、year / month → date など、BibTeX の表記を biblatex に寄せます。</p>
+      <p>著者・タイトル・出版情報・ページ・DOI・URL・識別子と、アンダーバー（_）で始まる独自フィールドを残します。変換時に _download_at へ端末の現地日付（YYYY-MM-DD）を入れます。abstract・keywords・file・note・location・address と、crossref・xref・xdata・related などの文献間参照フィールドは削除します。@string は展開し、@preamble は保持します。欠けた情報は補いません。</p>
+      <p>入力の引用キーに含まれる空白は解析前に取り除きます。引用キーは既存のものも第一著者の姓＋出版年（例：山田2026）に統一します。incollection だけは開始ページを末尾に付けます（例：山田2026p123）。ページが不明なら付けません。著者または出版年が不明なら既存キーを保持し、空欄なら空欄のままにします。</p>
+      <p>ファイル名は Year_Authors_Title の形式で、拡張子は付けません。.bib の保存名には同じ名前に .bib を付けます。著者は最大3人で、4人以上は et-al を付けます。ファイル名には著者の姓（著者がなければ編者）を使います。日本語の姓名を分けたい場合は「姓, 名」で入力してください。空白とファイル名に使えない文字はハイフンにし、長すぎる名前は UTF-8 で240バイト以内に短縮します。出版年なしは nd、著者なしは Unknown と表示します。</p>
+</details>
+`;export{e as default};

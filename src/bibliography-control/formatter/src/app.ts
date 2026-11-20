@@ -1,6 +1,6 @@
 import { fieldLabel } from './field-actions';
 import { addCommonField, getSingleEntryFieldActions, removeEntryField, changeEntryType, convertBib, makeFilename, type Conversion } from './formatter';
-import { exampleBib } from './examples';
+import { exampleBib, sampleBib } from './examples';
 import { detectBibLanguage } from './language';
 import { addEntryTag, entryTags, tagCandidates } from './tags';
 import { discardDraft, readDraft, writeDraft, type Draft } from './draft';
@@ -9,6 +9,7 @@ interface FormatterOptions {
   prefix: string;
   tags: string[];
   draftKey: string;
+  sample?: boolean;
   onSave(bib: string, filename: string, pdf: File | undefined): Promise<void>;
 }
 
@@ -27,10 +28,14 @@ export function mountFormatter(root: HTMLElement, options: FormatterOptions): { 
   const output = element('output', HTMLTextAreaElement);
   const status = element('status', HTMLParagraphElement);
   const warnings = element('warnings', HTMLUListElement);
+  const filenamesSection = element('filename-section', HTMLElement);
+  const editorTools = element('editor-tools', HTMLElement);
+  const filenameDisplay = element('formatter-file-name', HTMLSpanElement);
   const filenames = element('filenames', HTMLDivElement);
   const copy = element('copy', HTMLButtonElement);
   const download = element('download', HTMLButtonElement);
   const driveSave = element('drive-save', HTMLButtonElement);
+  if (options.sample) driveSave.textContent = 'サンプルに登録';
   const attachPdf = element('drive-attach', HTMLInputElement);
   const attachLabel = element('drive-attach-label', HTMLLabelElement);
   const copyNames = element('copy-names', HTMLButtonElement);
@@ -44,7 +49,7 @@ export function mountFormatter(root: HTMLElement, options: FormatterOptions): { 
   candidateRegion.hidden = candidates.length === 0;
   candidateReason.hidden = !candidates.some(tag => tag.includes(','));
   const candidateButtons = candidates.map(tag => {
-    const button = document.createElement('button'); button.type = 'button'; button.textContent = tag;
+    const button = document.createElement('button'); button.className = 'action-button'; button.type = 'button'; button.textContent = tag;
     if (tag.includes(',')) button.setAttribute('aria-describedby', 'tag-candidate-reason');
     button.addEventListener('click', () => {
       if (button.disabled || button.getAttribute('aria-pressed') === 'true') return;
@@ -63,33 +68,6 @@ export function mountFormatter(root: HTMLElement, options: FormatterOptions): { 
   const languageButtons = ['japanese', 'english', 'other'].map(value => ({ value, button: element(`language-${value}`, HTMLButtonElement) }));
   const otherLanguage = element('other-language', HTMLInputElement);
   const otherLanguageLabel = element('other-language-label', HTMLLabelElement);
-  const tabs = [element('converter-tab', HTMLButtonElement), element('prompt-tab', HTMLButtonElement)];
-  const panels = [element('converter-panel', HTMLDivElement), element('prompt-panel', HTMLDivElement)];
-  function selectTab(index: number): void {
-    tabs.forEach((tab, tabIndex) => {
-      const selected = tabIndex === index;
-      tab.setAttribute('aria-selected', String(selected));
-      tab.tabIndex = selected ? 0 : -1;
-      panels[tabIndex]!.hidden = !selected;
-    });
-  }
-  tabs.forEach((tab, index) => {
-    tab.addEventListener('click', () => selectTab(index));
-    tab.addEventListener('keydown', event => {
-      let nextIndex: number;
-      if (event.key === 'ArrowRight') nextIndex = (index + 1) % tabs.length;
-      else if (event.key === 'ArrowLeft') nextIndex = (index + tabs.length - 1) % tabs.length;
-      else if (event.key === 'Home') nextIndex = 0;
-      else if (event.key === 'End') nextIndex = tabs.length - 1;
-      else return;
-      event.preventDefault();
-      selectTab(nextIndex);
-      tabs[nextIndex]!.focus();
-    });
-  });
-  const llmPrompt = element('llm-prompt', HTMLTextAreaElement);
-  const promptStatus = element('prompt-status', HTMLParagraphElement);
-  element('copy-prompt', HTMLButtonElement).addEventListener('click', () => void copyText(llmPrompt.value, llmPrompt, promptStatus));
   function selectedLanguage(): string {
     return inputLanguage === 'other' ? otherLanguage.value.trim() : inputLanguage;
   }
@@ -140,17 +118,26 @@ export function mountFormatter(root: HTMLElement, options: FormatterOptions): { 
     fieldButtons.replaceChildren();
     entryTools.replaceChildren();
     filenames.replaceChildren();
+    filenamesSection.hidden = editorTools.hidden = true;
     warnings.replaceChildren();
     copy.disabled = download.disabled = copyNames.disabled = driveSave.disabled = true;
     status.textContent = '';
     updateTagCandidates();
   }
-  async function copyText(text: string, fallback: HTMLTextAreaElement | HTMLInputElement, feedback: HTMLElement = status): Promise<void> {
+  async function copyText(text: string, fallback: HTMLElement, feedback: HTMLElement = status): Promise<void> {
     try {
       await navigator.clipboard.writeText(text);
       feedback.textContent = '';
     } catch {
-      fallback.focus(); fallback.select();
+      fallback.focus();
+      if (fallback instanceof HTMLTextAreaElement || fallback instanceof HTMLInputElement) fallback.select();
+      else {
+        const range = document.createRange();
+        range.selectNodeContents(fallback);
+        const selection = getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+      }
       feedback.textContent = 'コピーする内容を選択しました。Ctrl+C / ⌘C でコピーしてください。';
     }
   }
@@ -161,7 +148,7 @@ export function mountFormatter(root: HTMLElement, options: FormatterOptions): { 
     saveCurrentDraft();
   }
   source.addEventListener('input', event => {
-    importedPdf = undefined; attachLabel.hidden = true;
+    importedPdf = undefined; attachLabel.hidden = filenameDisplay.hidden = true;
     detectLanguageOnConvert = true;
     sourceChanged();
     if (event instanceof InputEvent && event.inputType === 'insertFromPaste') convertSource();
@@ -177,10 +164,22 @@ export function mountFormatter(root: HTMLElement, options: FormatterOptions): { 
     } catch (error) { status.textContent = `編集中: ${error instanceof Error ? error.message : String(error)}`; }
   }
   output.addEventListener('input', () => { previewOutput(); saveCurrentDraft(); });
-  element('example', HTMLButtonElement).addEventListener('click', () => { source.value = exampleBib; detectLanguageOnConvert = true; sourceChanged(); source.focus(); source.setSelectionRange(0, 0); source.scrollTop = 0; });
+  function loadExample(): void {
+    importedPdf = undefined;
+    attachLabel.hidden = filenameDisplay.hidden = true;
+    source.value = options.sample ? sampleBib : exampleBib;
+    detectLanguageOnConvert = true;
+    convertSource();
+  }
+  element('example', HTMLButtonElement).addEventListener('click', () => {
+    loadExample();
+    source.focus();
+    source.setSelectionRange(0, 0);
+    source.scrollTop = 0;
+  });
   element('clear', HTMLButtonElement).addEventListener('click', () => {
     source.value = ''; otherLanguage.value = ''; selectLanguage('japanese');
-    detectLanguageOnConvert = true; lastConvertedSource = ''; importedPdf = undefined; attachLabel.hidden = true;
+    detectLanguageOnConvert = true; lastConvertedSource = ''; importedPdf = undefined; attachLabel.hidden = filenameDisplay.hidden = true;
     invalidate(); discardDraft(options.draftKey);
     source.focus();
   });
@@ -203,6 +202,8 @@ export function mountFormatter(root: HTMLElement, options: FormatterOptions): { 
     warnings.replaceChildren();
     fieldButtons.replaceChildren();
     entryTools.replaceChildren();
+    filenamesSection.hidden = editorTools.hidden = result.entries.length === 0;
+    copyNames.hidden = result.entries.length < 2;
     fieldTools.hidden = result.entries.length !== 1;
     const singleEntry = result.entries.length === 1 ? result.entries[0] : undefined;
     if (singleEntry) {
@@ -223,7 +224,7 @@ export function mountFormatter(root: HTMLElement, options: FormatterOptions): { 
           }
           for (const field of fields) {
             const label = fieldLabel(field);
-            const button = document.createElement('button'); button.type = 'button';
+            const button = document.createElement('button'); button.type = 'button'; button.className = 'action-button';
             button.textContent = `${label}を${removing ? '削除' : '追加'}`; button.title = field;
             button.addEventListener('click', () => {
               if (!result) return;
@@ -247,7 +248,7 @@ export function mountFormatter(root: HTMLElement, options: FormatterOptions): { 
     for (const message of messages) { const li = document.createElement('li'); li.textContent = message; warnings.append(li); }
     for (const [entryIndex, entry] of result.entries.entries()) {
       const displayKey = entry.key || (result.entries.length === 1 ? 'キーなし' : `キーなし（文献${entryIndex + 1}）`);
-      const controls = document.createElement('div'); controls.className = 'toolbar';
+      const controls = document.createElement('div'); controls.className = 'entry-type-controls';
       const typeLabel = document.createElement('label'); typeLabel.textContent = result.entries.length === 1 ? '文献種別 ' : `${displayKey} の文献種別 `;
       const typeSelect = document.createElement('select'); typeSelect.setAttribute('aria-label', `${displayKey} の文献種別`); typeSelect.dataset.entryIndex = String(entryIndex);
       const choices: [string, string][] = [['article', '雑誌論文'], ['inproceedings', '会議論文'], ['book', '書籍'], ['incollection', '書籍の章'], ['phdthesis', '博士論文'], ['mathesis', '修士論文'], ['thesis', 'その他の学位論文'], ['report', '報告書'], ['online', 'Webページ'], ['unpublished', '未刊行資料'], ['misc', 'その他・未分類']];
@@ -256,7 +257,7 @@ export function mountFormatter(root: HTMLElement, options: FormatterOptions): { 
       for (const [value, text] of choices) { const option = document.createElement('option'); option.value = value; option.textContent = text; typeSelect.append(option); }
       typeSelect.value = selected;
       typeLabel.append(typeSelect);
-      const changeType = document.createElement('button'); changeType.textContent = '種別を変更'; changeType.setAttribute('aria-label', `${displayKey} の種別を変更`);
+      const changeType = document.createElement('button'); changeType.type = 'button'; changeType.className = 'action-button'; changeType.textContent = '種別を変更'; changeType.setAttribute('aria-label', `${displayKey} の種別を変更`);
       changeType.addEventListener('click', () => {
         if (!result) return;
         try {
@@ -273,13 +274,13 @@ export function mountFormatter(root: HTMLElement, options: FormatterOptions): { 
       controls.append(typeLabel, changeType);
       const row = document.createElement('div'); row.className = 'filename-row';
       entryTools.append(controls);
-      const label = document.createElement('label'); label.textContent = displayKey;
-      const input = document.createElement('input'); input.readOnly = true; input.value = entry.filename;
-      input.id = `filename-${filenames.children.length}`; label.htmlFor = input.id;
-      input.addEventListener('click', () => input.select());
-      const button = document.createElement('button'); button.textContent = 'コピー'; button.type = 'button'; button.setAttribute('aria-label', `${displayKey} のファイル名をコピー`);
-      button.addEventListener('click', () => void copyText(entry.filename, input));
-      row.append(input, button);
+      const label = document.createElement('p'); label.textContent = displayKey;
+      const value = document.createElement('code'); value.className = 'filename-value';
+      value.textContent = entry.filename; value.tabIndex = 0;
+      const button = document.createElement('button'); button.textContent = 'コピー'; button.type = 'button'; button.className = 'action-button';
+      button.setAttribute('aria-label', `${displayKey} のファイル名をコピー`);
+      button.addEventListener('click', () => void copyText(entry.filename, value));
+      row.append(value, button);
       const group = document.createElement('div'); group.className = 'filename-entry'; group.append(label, row); filenames.append(group);
     }
     copy.disabled = download.disabled = copyNames.disabled = false;
@@ -293,6 +294,7 @@ export function mountFormatter(root: HTMLElement, options: FormatterOptions): { 
     const file = fileInput.files?.[0];
     if (!file) return;
     fileInput.value = '';
+    filenameDisplay.textContent = file.name; filenameDisplay.hidden = false;
     importedPdf = undefined; attachLabel.hidden = true;
     invalidate();
     const revision = inputRevision;
@@ -377,6 +379,8 @@ export function mountFormatter(root: HTMLElement, options: FormatterOptions): { 
     detectLanguageOnConvert = draft.detectLanguageOnConvert;
     lastConvertedSource = draft.lastConvertedSource;
     previewOutput();
+  } else if (options.sample) {
+    loadExample();
   }
   updateTagCandidates();
 

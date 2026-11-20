@@ -3,4 +3,24 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   base: './',
   build: { license: { fileName: 'THIRD-PARTY-NOTICES.md' } },
+  plugins: [{
+    name: 'bibliography-pages',
+    apply: 'build',
+    generateBundle: {
+      order: 'post',
+      handler(_options, bundle) {
+        const html = bundle['index.html'];
+        if (html?.type !== 'asset') this.error('文献ライブラリの index.html がありません。');
+        // JS の読み込み位置を揃え、直接開いた場合も同じ画面を起動する。
+        const document = String(html.source).replaceAll('="./assets/', '="../assets/');
+        for (const page of ['new', 'prompt']) {
+          const title = page === 'new' ? '文献を追加' : 'LLM 用プロンプト';
+          const source = document.replace('data-page="library">', 'data-page="library" hidden>')
+            .replace(`data-page="${page}" hidden>`, `data-page="${page}">`)
+            .replace('<title>文献ライブラリ</title>', `<title>${title} | 文献ライブラリ</title>`);
+          this.emitFile({ type: 'asset', fileName: page + '/index.html', source });
+        }
+      },
+    },
+  }],
 });

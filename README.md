@@ -67,9 +67,20 @@ npm run dev
 
 Google Drive 接続の対象は `https://static-specimen-box.sasakiy84.net` です。OAuth の「テストユーザー」に登録した Google アカウントで接続し、直下に `Bibs/`、`Originals/`、`Notes/`、`Scripts/` があるルートを選びます。新規 CSV は `Scripts/_entries.csv` に作成します。既存の CSV は同じファイル ID で更新します。書き込み直前に変更を確認するため、初版の編集・採番は一つのルートを一人ずつ操作する運用を想定しています。
 
-「サンプルを見る」では、一時データで編集や登録を試せます。サンプルで保存した内容は、サンプルを開いている間だけ保持されます。添付の実データは配布に含めません。型検査と配布ファイルの生成は `npm run build`、回帰テストは `npm test`（Node.js と Bun）が担当します。
+「サンプルを見る」では、一時データで編集や登録を試せます。文献追加は `/bibliography-control/new/?sample=1` から変換済みの例を開けます。LLM 用プロンプトは `/bibliography-control/prompt/` にあります。サンプルで保存した内容は、サンプルを開いている間だけ保持されます。添付の実データは配布に含めません。型検査と配布ファイルの生成は `npm run build`、回帰テストは `npm test`（Node.js と Bun）が担当します。
 
 参考文献の出典とライセンスは [THIRD_PARTY.md](src/bibliography-control/public/THIRD_PARTY.md) にあります。Bib 変換と PDF メタデータの処理は [Bib Formatter](https://github.com/sasakiy84/bib-formatter/tree/954072af0237d122dfcc44e929626c20d6943038) のソースを統合しています。
+
+### ブラウザの再起動後にも Drive に接続する
+
+Google Cloud で同じ OAuth クライアントの「承認済みのリダイレクト URI」に `https://static-specimen-box.sasakiy84.net/bibliography-control/auth/callback` を追加します。Cloudflare の Worker `static-specimen-box` で、**Settings → Variables and Secrets** に次を Secret として登録します。
+
+| 名前 | 値 |
+| --- | --- |
+| `BIBLIOGRAPHY_GOOGLE_CLIENT_SECRET` | 上記の OAuth クライアントのシークレット |
+| `BIBLIOGRAPHY_SESSION_KEY` | `openssl rand -hex 32` で生成した64桁の値 |
+
+登録後の初回接続で Google の認可を行うと、ブラウザの再起動後も同じアカウントと最後に選んだフォルダを復帰します。接続復帰用の情報は、暗号化した HttpOnly Cookie で保持します。Cloudflare Worker は Google OAuth のトークン交換と更新を担当し、Drive の文献データはブラウザから直接読み書きします。「外部・テスト」の Google Cloud プロジェクトでは Drive の認可は最大7日です。 [Google OAuth の有効期限](https://developers.google.com/identity/protocols/oauth2#expiration)
 
 ## アプリの追加と公開
 

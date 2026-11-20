@@ -4,18 +4,18 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>文献ライブラリ</title>
-  <script type="module" crossorigin src="./assets/index-wz4yQOZX.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-hYymXJdi.css">
+  <script type="module" crossorigin src="./assets/index-B-Cthyar.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-CPoNPSIg.css">
 </head>
 <body>
-  <main class="page" id="main">
-    <header class="heading"><h1>文献ライブラリ</h1><p class="updated" id="csv-updated" hidden></p></header>
+  <main class="page" id="main" data-page="library">
+    <header class="heading"><h1 tabindex="-1" data-page-heading>文献ライブラリ</h1><p class="updated" id="csv-updated" hidden></p></header>
     <section class="connection" aria-label="Google Drive 接続">
       <div class="connection-actions">
         <button id="connect-drive" type="button" class="action-button primary-action">Google Drive に接続</button>
         <button id="choose-folder" type="button" class="action-button" hidden>文献フォルダを選択</button>
         <button id="disconnect-drive" type="button" class="text-button" hidden>接続を解除</button>
-        <button id="open-demo" type="button" class="text-button">サンプルを見る</button>
+        <a id="open-demo" class="text-button" data-route="library" data-sample="true" href="?sample=1">サンプルを見る</a>
       </div>
       <details id="folder-link" class="folder-link" hidden>
         <summary>フォルダのリンクを入力</summary>
@@ -31,7 +31,7 @@
         <p id="workspace-name" class="workspace-name"></p>
         <div class="connection-actions">
           <button id="refresh-csv" type="button" class="action-button">一覧・CSV を更新</button>
-          <button id="new-entry" type="button" class="action-button primary-action">文献を追加</button>
+          <a id="new-entry" class="action-button primary-action" data-route="new" href="./new/">文献を追加</a>
         </div>
       </div>
       <p id="workspace-status" role="status" hidden></p>
@@ -124,10 +124,41 @@
       <div class="edit-actions"><button id="save-edit" type="submit" class="action-button primary-action">Drive に保存</button></div>
     </form>
   </dialog>
-  <dialog id="formatter-dialog" class="edit-dialog formatter-dialog" aria-labelledby="formatter-title">
-    <div class="pane-toolbar"><div><h2 id="formatter-title">文献を追加</h2><p class="updated" id="formatter-prefix"></p></div><button id="close-formatter" type="button" class="action-button">閉じる</button></div>
-    <p id="formatter-message" role="status" class="copy-status" hidden></p>
+  <main id="formatter-page" class="page formatter-page" data-page="new" hidden>
+    <header class="editor-page-header">
+      <nav class="editor-page-links" aria-label="ナビゲーション">
+        <a data-route="library" href="../">文献一覧に戻る</a>
+        <a data-route="prompt" href="../prompt/">LLM 用プロンプト</a>
+      </nav>
+      <h1 tabindex="-1" data-page-heading>文献を追加</h1>
+      <p class="updated" id="formatter-prefix" hidden></p>
+      <p id="formatter-message" role="status" class="editor-message" hidden></p>
+    </header>
+    <section id="formatter-unavailable" class="editor-card" hidden>
+      <p>文献一覧で Google Drive に接続し、文献フォルダを選択してください。</p>
+      <div class="editor-actions">
+        <a class="action-button primary-action" data-route="library" href="../">文献一覧を開く</a>
+        <a class="action-button" data-route="new" data-sample="true" href="?sample=1">サンプルで試す</a>
+      </div>
+    </section>
     <div class="formatter-app" id="formatter-root"></div>
-  </dialog>
+  </main>
+
+  <main id="prompt-page" class="page prompt-page" data-page="prompt" hidden>
+    <header class="editor-page-header">
+      <nav class="editor-page-links" aria-label="ナビゲーション">
+        <a data-route="library" href="../">文献一覧に戻る</a>
+        <a data-route="new" href="../new/">文献を追加</a>
+      </nav>
+      <h1 tabindex="-1" data-page-heading>LLM 用プロンプト</h1>
+    </header>
+    <section class="editor-card prompt-card">
+      <div class="editor-actions">
+        <button id="copy-prompt" type="button" class="action-button primary-action">プロンプトをコピー</button>
+        <p id="prompt-status" role="status" class="copy-status" hidden></p>
+      </div>
+      <pre id="llm-prompt" tabindex="0" aria-label="LLM 用プロンプト本文"></pre>
+    </section>
+  </main>
 </body>
 </html>

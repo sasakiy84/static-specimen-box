@@ -686,6 +686,7 @@ button:disabled { cursor: default; opacity: .65; }
 }
 .edit-dialog::backdrop { background: rgb(24 37 52 / .52); }
 .edit-dialog h2 { margin: 0; font-size: 1.25rem; }
+#edit-file { overflow-wrap: anywhere; }
 .edit-dialog .bib-source { margin: 8px 0 0; min-height: min(370px, 50vh); }
 .edit-dialog .edit-actions { margin-top: 12px; justify-content: end; }
 .formatter-dialog { width: min(1120px, calc(100% - 28px)); }

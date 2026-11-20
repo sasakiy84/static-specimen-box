@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>文献を追加 | 文献ライブラリ</title>
+  <script type="module" crossorigin src="../assets/index-B-Cthyar.js"></script>
+  <link rel="stylesheet" crossorigin href="../assets/index-CPoNPSIg.css">
+</head>
+<body>
+  <main class="page" id="main" data-page="library" hidden>
+    <header class="heading"><h1 tabindex="-1" data-page-heading>文献ライブラリ</h1><p class="updated" id="csv-updated" hidden></p></header>
+    <section class="connection" aria-label="Google Drive 接続">
+      <div class="connection-actions">
+        <button id="connect-drive" type="button" class="action-button primary-action">Google Drive に接続</button>
+        <button id="choose-folder" type="button" class="action-button" hidden>文献フォルダを選択</button>
+        <button id="disconnect-drive" type="button" class="text-button" hidden>接続を解除</button>
+        <a id="open-demo" class="text-button" data-route="library" data-sample="true" href="?sample=1">サンプルを見る</a>
+      </div>
+      <details id="folder-link" class="folder-link" hidden>
+        <summary>フォルダのリンクを入力</summary>
+        <form id="folder-link-form">
+          <label for="folder-link-input">Google Drive のフォルダのリンク</label>
+          <div class="folder-link-fields">
+            <input id="folder-link-input" type="text" placeholder="https://drive.google.com/drive/folders/…" autocomplete="off" spellcheck="false" required>
+            <button id="open-folder-link" type="submit" class="action-button">このフォルダを開く</button>
+          </div>
+        </form>
+      </details>
+      <div id="workspace-bar" hidden>
+        <p id="workspace-name" class="workspace-name"></p>
+        <div class="connection-actions">
+          <button id="refresh-csv" type="button" class="action-button">一覧・CSV を更新</button>
+          <a id="new-entry" class="action-button primary-action" data-route="new" href="./new/">文献を追加</a>
+        </div>
+      </div>
+      <p id="workspace-status" role="status" hidden></p>
+      <p id="workspace-error" class="field-error" role="alert" hidden></p>
+    </section>
+    <div id="library-content" hidden>
+    <p id="schema-message" class="notice" hidden>詳細情報を表示するには「一覧・CSV を更新」を押してください。</p>
+    <section class="controls" role="search" aria-label="文献を検索・絞り込み">
+      <div class="search-field"><label for="search">キーワード</label><input id="search" type="search" autocomplete="off" placeholder="タイトル・著者・メモ・DOI"></div>
+      <div><label for="year">年</label><select id="year"><option value="">すべての年</option></select></div>
+      <div><label for="type">資料種別</label><select id="type"><option value="">すべての種別</option></select></div>
+      <div class="tag-search">
+        <label for="tag-query">タグ</label>
+        <div class="tag-combobox">
+          <input id="tag-query" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="tag-suggestions" aria-describedby="tag-help tag-error" autocomplete="off" spellcheck="false" placeholder="タグを選択、または (日本語 OR 英語) AND 読解">
+          <ul id="tag-suggestions" class="suggestions" role="listbox" aria-label="タグの候補" hidden></ul>
+        </div>
+        <div class="tag-help-row"><p id="tag-help" class="field-help">複数選択は OR。AND・OR・括弧で組み合わせられます。</p><button id="clear-tags" type="button" class="text-button">タグを解除</button></div>
+        <p id="tag-error" class="field-error" role="status" hidden></p>
+        <div id="recent-wrap" class="recent-wrap" hidden><span class="small-label">最近使ったタグ</span><div id="recent-tags" class="tags" aria-label="最近更新されたBibのタグ"></div></div>
+      </div>
+    </section>
+    <div class="toolbar"><p id="count" class="count" role="status" aria-live="polite"></p><div class="sort-wrap"><label for="sort">並べ替え</label><select id="sort"><option value="id-desc" selected>IDが新しい順</option><option value="newest">年が新しい順</option><option value="oldest">年が古い順</option><option value="title">タイトル順</option><option value="id">IDが古い順</option></select></div></div>
+    <section id="list" class="list" aria-label="文献一覧"></section>
+    <p id="empty" class="empty" hidden>一致する文献はありません。</p>
+    </div>
+    <footer class="footer"><a href="https://citeproc-js.readthedocs.io/" target="_blank" rel="noopener noreferrer">参考文献整形：citeproc-js / Frank Bennett</a><button id="show-licenses" type="button" class="text-button">ライセンス</button></footer>
+  </main>
+
+  <template id="entry-template">
+    <article class="entry">
+      <div class="entry-meta"><span class="entry-id"></span><span class="entry-year"></span><span class="entry-citekey"></span></div>
+      <div class="entry-content"><span class="entry-type"></span><h2><button type="button" class="entry-title" aria-haspopup="dialog"></button></h2><p class="authors"></p><p class="publication"></p><div class="tags entry-tags"></div><nav class="links" aria-label="資料へのリンク"></nav></div>
+    </article>
+  </template>
+
+  <dialog id="detail-panel" class="panel" aria-labelledby="detail-title">
+    <header class="panel-header"><div><p id="detail-id" class="small-label"></p><h2 id="detail-title"></h2></div><button id="close-panel" type="button" class="close-button" aria-label="詳細を閉じる" autofocus>閉じる</button></header>
+    <div class="tablist" role="tablist" aria-label="文献の詳細">
+      <button type="button" id="tab-details" role="tab" aria-controls="pane-details" aria-selected="true">詳細</button>
+      <button type="button" id="tab-bib" role="tab" aria-controls="pane-bib" aria-selected="false" tabindex="-1">Bib</button>
+      <button type="button" id="tab-references" role="tab" aria-controls="pane-references" aria-selected="false" tabindex="-1">参考文献</button>
+    </div>
+    <p id="entry-message" role="status" class="copy-status panel-message" hidden></p>
+    <div class="panel-scroll">
+      <section id="pane-details" role="tabpanel" aria-labelledby="tab-details" tabindex="0">
+        <div id="filename-row" class="filename-row" hidden><span id="bib-filename" class="bib-filename"></span><button id="copy-filename" type="button" class="action-button" aria-label="Bibファイル名をコピー">コピー</button></div>
+        <p id="filename-status" class="copy-status" role="status"></p>
+        <div id="detail-tags" class="tags detail-tags"></div><dl id="detail-fields" class="details"></dl>
+        <section id="memo-section" class="detail-section" hidden><h3>メモ</h3><div id="detail-memo" class="preserve-lines"></div></section>
+        <section id="abstract-section" class="detail-section" hidden><h3>抄録</h3><div id="detail-abstract" class="preserve-lines"></div></section>
+        <section class="detail-section"><h3>資料</h3><nav id="detail-links" class="links" aria-label="原文とノートのリンク"></nav>
+          <div id="attachment-actions" class="connection-actions" hidden>
+            <button id="attach-original" type="button" class="action-button">原文を追加</button>
+            <button id="new-note" type="button" class="action-button">ノートを作成</button>
+            <input id="attachment-file" type="file" hidden>
+          </div>
+          <div id="editable-notes"></div>
+</section>
+      </section>
+      <section id="pane-bib" role="tabpanel" aria-labelledby="tab-bib" hidden>
+        <div class="pane-toolbar"><label for="bib-source">Bib本文</label><button id="edit-bib" type="button" class="action-button" hidden>Bib を編集</button><button id="copy-bib" type="button" class="action-button">全文をコピー</button></div>
+        <textarea id="bib-source" class="bib-source" readonly spellcheck="false" aria-label="元のBib本文"></textarea>
+        <p id="bib-status" class="copy-status" role="status"></p>
+      </section>
+      <section id="pane-references" role="tabpanel" aria-labelledby="tab-references" hidden>
+        <div id="citation-list" class="citation-list" aria-label="参考文献の全書式"></div>
+      </section>
+    </div>
+  </dialog>
+  <template id="citation-template">
+    <section class="reference-card">
+      <header class="reference-heading"><h3 class="citation-heading"></h3><a class="citation-source source-link" target="_blank" rel="noopener noreferrer">書式の参照資料</a></header>
+      <div class="citation-result"></div>
+      <p class="citation-missing notice" hidden></p>
+      <p class="citation-notice field-help" hidden></p>
+      <p class="citation-error field-error" role="alert" hidden></p>
+      <div class="copy-actions"><button type="button" class="copy-citation action-button">テキストをコピー</button><button type="button" class="copy-rich action-button">書式付きでコピー</button></div>
+      <p class="citation-status copy-status" role="status"></p>
+    </section>
+  </template>
+  <dialog id="license-panel" class="license-panel" aria-labelledby="license-heading"><div class="pane-toolbar"><h2 id="license-heading">使用ライブラリ・書式</h2><button id="close-licenses" type="button" class="action-button" autofocus>閉じる</button></div><pre id="license-text" class="preserve-lines"></pre></dialog>
+  <dialog id="edit-dialog" class="edit-dialog" aria-labelledby="edit-title">
+    <form id="edit-form">
+      <div class="pane-toolbar"><h2 id="edit-title"></h2><button id="close-edit" type="button" class="action-button">閉じる</button></div>
+      <p id="edit-file" class="updated"></p>
+      <label for="edit-source">原文</label>
+      <textarea id="edit-source" class="bib-source" spellcheck="false" required></textarea>
+      <p id="edit-error" class="field-error" role="alert" hidden></p>
+      <div class="edit-actions"><button id="save-edit" type="submit" class="action-button primary-action">Drive に保存</button></div>
+    </form>
+  </dialog>
+  <main id="formatter-page" class="page formatter-page" data-page="new">
+    <header class="editor-page-header">
+      <nav class="editor-page-links" aria-label="ナビゲーション">
+        <a data-route="library" href="../">文献一覧に戻る</a>
+        <a data-route="prompt" href="../prompt/">LLM 用プロンプト</a>
+      </nav>
+      <h1 tabindex="-1" data-page-heading>文献を追加</h1>
+      <p class="updated" id="formatter-prefix" hidden></p>
+      <p id="formatter-message" role="status" class="editor-message" hidden></p>
+    </header>
+    <section id="formatter-unavailable" class="editor-card" hidden>
+      <p>文献一覧で Google Drive に接続し、文献フォルダを選択してください。</p>
+      <div class="editor-actions">
+        <a class="action-button primary-action" data-route="library" href="../">文献一覧を開く</a>
+        <a class="action-button" data-route="new" data-sample="true" href="?sample=1">サンプルで試す</a>
+      </div>
+    </section>
+    <div class="formatter-app" id="formatter-root"></div>
+  </main>
+
+  <main id="prompt-page" class="page prompt-page" data-page="prompt" hidden>
+    <header class="editor-page-header">
+      <nav class="editor-page-links" aria-label="ナビゲーション">
+        <a data-route="library" href="../">文献一覧に戻る</a>
+        <a data-route="new" href="../new/">文献を追加</a>
+      </nav>
+      <h1 tabindex="-1" data-page-heading>LLM 用プロンプト</h1>
+    </header>
+    <section class="editor-card prompt-card">
+      <div class="editor-actions">
+        <button id="copy-prompt" type="button" class="action-button primary-action">プロンプトをコピー</button>
+        <p id="prompt-status" role="status" class="copy-status" hidden></p>
+      </div>
+      <pre id="llm-prompt" tabindex="0" aria-label="LLM 用プロンプト本文"></pre>
+    </section>
+  </main>
+</body>
+</html>

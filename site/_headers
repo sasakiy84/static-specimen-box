@@ -17,3 +17,9 @@
 
 /bibliography-control/
   Cache-Control: public, max-age=0, must-revalidate, no-transform
+
+/bibliography-control/new/
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
+
+/bibliography-control/prompt/
+  Cache-Control: public, max-age=0, must-revalidate, no-transform

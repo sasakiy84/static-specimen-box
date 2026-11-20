@@ -31,6 +31,17 @@ export function demoDrive() {
       `@${type}{${key},`,
       `  title = {${title}},`, `  author = {${author}},`, `  date = {${year}},`,
       `  language = {${/^[A-Z]/.test(title) ? 'english' : 'japanese'}},`,
+      ...(id === 'MA0004' ? [
+        '  booktitle = {調査と記録の方法},',
+        '  publisher = {サンプル出版},',
+        '  pages = {20--35},',
+        '  _author_latin = {Sato, Nagi},',
+        '  _title_latin = {Chosa kiroku o yomikaesu},',
+        '  _title_en = {Revisiting field notes},',
+        '  _booktitle_latin = {Chosa to kiroku no hoho},',
+        '  _booktitle_en = {Methods for recording fieldwork},',
+        '  _publisher_en = {Sample Press},',
+      ] : []),
       `  _tags = {${tags}},`, `  _notes = {${memo}},`,
       '}\n',
     ].join('\n'));
