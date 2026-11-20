@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="日本語 WordNet 2.1の検索・閲覧">
+  <title>日本語 WordNet</title>
+  <script type="module" src="./src/main.js"></script>
+</head>
+<body>
+  <main class="page">
+    <header class="masthead">
+      <div>
+        <h1><a class="home-link" id="home-nav" href="?page=search">日本語 WordNet</a></h1>
+      </div>
+      <nav class="navigation" aria-label="ページ">
+        <button class="nav-button" id="about-nav" type="button">About</button>
+      </nav>
+    </header>
+
+    <section class="page-view" id="search-page" aria-labelledby="search-heading">
+      <h2 class="page-heading" id="search-heading">検索</h2>
+      <form class="search-form" id="search-form">
+        <div>
+          <label class="search-label" for="query">単語・読み・synset ID</label>
+          <input class="search-input" id="query" name="q" type="search" autocomplete="off" placeholder="例: 犬、イヌ、wnja-00015388-n">
+        </div>
+        <div>
+          <label class="search-label" for="part-of-speech">品詞</label>
+          <select class="pos-filter" id="part-of-speech" name="pos">
+            <option value="all">すべて</option>
+            <option value="n">名詞</option>
+            <option value="v">動詞</option>
+            <option value="a">形容詞</option>
+            <option value="r">副詞</option>
+          </select>
+        </div>
+        <button class="search-submit" type="submit">検索する</button>
+        <label class="check-row" for="include-text">
+          <input id="include-text" name="text" type="checkbox">
+          <span>定義・例文も検索する</span>
+        </label>
+      </form>
+      <p class="result-meta" id="result-meta" role="status" aria-live="polite"></p>
+      <nav class="results-pagination" id="results-pagination-top" aria-label="結果ページ（上部）" hidden=""></nav>
+      <p class="empty-results" id="empty-results" hidden=""></p>
+      <div class="result-list" id="result-list" aria-label="検索結果"></div>
+      <nav class="results-pagination" id="results-pagination-bottom" aria-label="結果ページ（下部）" hidden=""></nav>
+    </section>
+
+    <section class="page-view detail-page" id="detail-page" aria-label="詳細" aria-live="polite" hidden="">
+      <div class="detail-panel">
+        <div id="detail-content" hidden=""></div>
+      </div>
+    </section>
+
+    <section class="page-view about-page" id="about-page" aria-labelledby="about-heading" hidden="">
+      <h2 class="page-heading" id="about-heading">About</h2>
+      <p>データ出典: <a href="https://bond-lab.github.io/wnja/" rel="noreferrer">Japanese WordNet 2.1</a></p>
+      <dl class="stats" aria-label="収録データ">
+        <div class="stat"><dt class="stat-label">語</dt><dd class="stat-value" id="stat-entries">—</dd></div>
+        <div class="stat"><dt class="stat-label">語義</dt><dd class="stat-value" id="stat-senses">—</dd></div>
+        <div class="stat"><dt class="stat-label">synset</dt><dd class="stat-value" id="stat-synsets">—</dd></div>
+        <div class="stat"><dt class="stat-label">日本語の語があるsynset</dt><dd class="stat-value" id="stat-japanese-synsets">—</dd></div>
+        <div class="stat"><dt class="stat-label">定義</dt><dd class="stat-value" id="stat-definitions">—</dd></div>
+        <div class="stat"><dt class="stat-label">例文</dt><dd class="stat-value" id="stat-examples">—</dd></div>
+      </dl>
+      <details class="license">
+        <summary>ライセンス</summary>
+        <div class="license-body">
+        <pre>Copyright: 2021-2026 Francis Bond, Takayuki Kuribayashi
+Copyright: 2018-2020 Francis Bond
+Copyright: 2016-2017 Francis Bond, Takayuki Kuribayashi
+Copyright: 2012-2015 Francis Bond
+Copyright: 2009-2011 NICT
+
+Japanese WordNet
+
+This software and database is being provided to you, the LICENSEE, by
+the National Institute of Information and Communications Technology
+under the following license. By obtaining, using and/or copying this
+software and database, you agree that you have read, understood, and
+will comply with these terms and conditions:
+
+Permission to use, copy, modify and distribute this software and
+database and its documentation for any purpose and without fee or
+royalty is hereby granted, provided that you agree to comply with
+the following copyright notice and statements, including the
+disclaimer, and that the same appear on ALL copies of the software,
+database and documentation, including modifications that you make
+for internal use or for distribution.
+
+THIS SOFTWARE AND DATABASE IS PROVIDED "AS IS" AND NICT MAKES NO
+REPRESENTATIONS OR WARRANTIES, EXPRESS OR IMPLIED. BY WAY OF EXAMPLE,
+BUT NOT LIMITATION, NICT MAKES NO REPRESENTATIONS OR WARRANTIES OF
+MERCHANTABILITY OR FITNESS FOR ANY PARTICULAR PURPOSE OR THAT THE USE
+OF THE LICENSED SOFTWARE, DATABASE OR DOCUMENTATION WILL NOT INFRINGE
+ANY THIRD PARTY PATENTS, COPYRIGHTS, TRADEMARKS OR OTHER RIGHTS.
+
+The name of the National Institute of Information and Communications
+Technology may not be used in advertising or publicity pertaining to
+distribution of the software and/or database. Title to copyright in
+this software, database and any associated documentation shall at all
+times remain with National Institute of Information and
+Communications Technology and LICENSEE agrees to preserve same.</pre>
+        </div>
+      </details>
+    </section>
+  </main>
+
+</body>
+</html>
