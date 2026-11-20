@@ -4,15 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>LLM 用プロンプト | turris-altissima</title>
-  <script type="module" crossorigin src="../assets/index-DEoDmuPv.js"></script>
-  <link rel="stylesheet" crossorigin href="../assets/index-BNFEuSir.css">
+  <script type="module" crossorigin src="../assets/index-B6cwh2nz.js"></script>
+  <link rel="stylesheet" crossorigin href="../assets/index-D35iLjlg.css">
 </head>
 <body>
   <main class="page" id="main" data-page="library" hidden>
     <header class="heading"><h1 tabindex="-1" data-page-heading>turris-altissima</h1><p class="updated" id="csv-updated" hidden></p></header>
     <section class="connection" aria-label="Google Drive 接続">
       <div class="connection-actions">
-        <button id="connect-drive" type="button" class="action-button primary-action">Google Drive に接続</button>
+        <button id="connect-drive" type="button" class="action-button primary-action" hidden>Google Drive に接続</button>
         <button id="choose-folder" type="button" class="action-button" hidden>文献フォルダを選択</button>
         <button id="disconnect-drive" type="button" class="text-button" hidden>接続を解除</button>
         <a id="open-demo" class="text-button" data-route="library" data-sample="true" href="?sample=1">サンプルを見る</a>
@@ -36,12 +36,13 @@
           <a id="new-entry" class="action-button primary-action" data-route="new" href="./new/">文献を追加</a>
         </div>
       </div>
+      <p id="connection-progress" class="connection-progress" role="status">読み込み中…</p>
       <p id="workspace-status" role="status" hidden></p>
       <p id="workspace-error" class="field-error" role="alert" hidden></p>
     </section>
     <div id="library-content" hidden>
     <p id="schema-message" class="notice" hidden>詳細情報を表示するには「一覧・CSV を更新」を押してください。</p>
-    <section class="controls" role="search" aria-label="文献を検索・絞り込み">
+    <section class="controls" id="library-filters" role="search" aria-label="文献を検索・絞り込み">
       <div class="search-field"><label for="search">キーワード</label><input id="search" type="search" autocomplete="off" placeholder="タイトル・著者・メモ・DOI"></div>
       <div><label for="year">年</label><select id="year"><option value="">すべての年</option></select></div>
       <div><label for="type">資料種別</label><select id="type"><option value="">すべての種別</option></select></div>
@@ -56,9 +57,12 @@
         <div id="recent-wrap" class="recent-wrap" hidden><span class="small-label">最近使ったタグ</span><div id="recent-tags" class="tags" aria-label="最近更新されたBibのタグ"></div></div>
       </div>
     </section>
-    <div class="toolbar"><p id="count" class="count" role="status" aria-live="polite"></p><div class="sort-wrap"><label for="sort">並べ替え</label><select id="sort"><option value="id-desc" selected>IDが新しい順</option><option value="newest">年が新しい順</option><option value="oldest">年が古い順</option><option value="title">タイトル順</option><option value="id">IDが古い順</option></select></div></div>
+    <div id="library-toolbar" class="toolbar"><p id="count" class="count" role="status" aria-live="polite"></p><div class="sort-wrap"><label for="sort">並べ替え</label><select id="sort"><option value="id-desc" selected>IDが新しい順</option><option value="newest">年が新しい順</option><option value="oldest">年が古い順</option><option value="title">タイトル順</option><option value="id">IDが古い順</option></select></div></div>
     <section id="list" class="list" aria-label="文献一覧"></section>
-    <p id="empty" class="empty" hidden>一致する文献はありません。</p>
+    <div id="empty" class="empty" hidden>
+      <p id="empty-message"></p>
+      <button id="clear-filters" type="button" class="action-button" hidden>絞り込みを解除</button>
+    </div>
     </div>
     <footer class="footer"><a href="https://citeproc-js.readthedocs.io/" target="_blank" rel="noopener noreferrer">参考文献整形：citeproc-js / Frank Bennett</a><button id="show-licenses" type="button" class="text-button">ライセンス</button></footer>
   </main>
@@ -94,8 +98,8 @@
             <button id="new-note" type="button" class="action-button" title="Google Drive の Notes フォルダに、独立した Markdown ファイルを作成します。">ノートを作成</button>
             <input id="attachment-file" type="file" hidden>
           </div>
-          <div id="editable-notes"></div>
-</section>
+          <div id="editable-notes" class="connection-actions"></div>
+        </section>
       </section>
       <section id="pane-bib" role="tabpanel" aria-labelledby="tab-bib" hidden>
         <div class="pane-toolbar"><label for="bib-source">Bib本文</label><button id="edit-bib" type="button" class="action-button" title="Bib ファイルの本文を開いて編集します。" hidden>Bib を編集</button><button id="copy-bib" type="button" class="action-button">全文をコピー</button></div>
@@ -151,16 +155,17 @@
       </nav>
       <h1 tabindex="-1" data-page-heading>文献を追加</h1>
       <p class="updated" id="formatter-prefix" hidden></p>
+      <p id="formatter-connection-progress" class="connection-progress" role="status">読み込み中…</p>
       <p id="formatter-message" role="status" class="editor-message" hidden></p>
     </header>
     <section id="formatter-unavailable" class="editor-card" hidden>
-      <p>文献一覧で Google Drive に接続し、文献フォルダを選択してください。</p>
+      <p id="formatter-connection-help">文献一覧で Google Drive に接続し、文献フォルダを選択してください。</p>
       <div class="editor-actions">
         <a class="action-button primary-action" data-route="library" href="../">文献一覧を開く</a>
         <a class="action-button" data-route="new" data-sample="true" href="?sample=1">サンプルで試す</a>
       </div>
     </section>
-    <div class="formatter-app" id="formatter-root"></div>
+    <div class="formatter-app" id="formatter-root" hidden></div>
   </main>
 
   <main id="prompt-page" class="page prompt-page" data-page="prompt">
@@ -173,7 +178,7 @@
     </header>
     <section class="editor-card prompt-card">
       <div class="editor-actions">
-        <button id="copy-prompt" type="button" class="action-button primary-action">プロンプトをコピー</button>
+        <button id="copy-prompt" type="button" class="action-button primary-action" disabled>プロンプトをコピー</button>
         <p id="prompt-status" role="status" class="copy-status" hidden></p>
       </div>
       <pre id="llm-prompt" tabindex="0" aria-label="LLM 用プロンプト本文"></pre>

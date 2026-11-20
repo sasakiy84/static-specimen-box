@@ -8,6 +8,7 @@ const byId = id => document.getElementById(id);
 const queryInput = byId('search'), tagInput = byId('tag-query'), yearSelect = byId('year'), typeSelect = byId('type'), sortSelect = byId('sort');
 sortSelect.value = 'id-desc';
 const list = byId('list'), count = byId('count'), empty = byId('empty'), template = byId('entry-template');
+const clearFilters = byId('clear-filters');
 const suggestions = byId('tag-suggestions'), tagError = byId('tag-error'), panel = byId('detail-panel');
 const collator = new Intl.Collator('ja', { numeric: true, sensitivity: 'base' });
 let entries = [], catalog = [], entriesById = new Map(), searchIndex = new Map();
@@ -15,7 +16,7 @@ let tagExpression = null, activeSuggestions = [], activeOption = -1, composing =
 let selectedEntry = null, returnFocus = null, activeTab = 'details';
 let referenceEntry = null;
 let detailSlot = history.state?.libraryDetailSlot === true;
-const mobilePanel = window.matchMedia('(max-width:760px)');
+const modalPanel = window.matchMedia('(max-width: 960px)');
 function addLink(container, text, url, title) {
     const href = LibraryCore.safeUrl(url);
     if (!href)
@@ -106,7 +107,8 @@ function render() {
     list.replaceChildren(...found.map(renderEntry));
     count.textContent = found.length + ' / ' + entries.length + ' 件';
     empty.hidden = found.length > 0;
-    empty.textContent = entries.length ? '一致する文献はありません。' : '文献はまだ登録されていません。';
+    byId('empty-message').textContent = entries.length ? '一致する文献はありません。' : '文献はまだ登録されていません。';
+    clearFilters.hidden = !entries.length || found.length > 0;
     byId('clear-tags').disabled = !tagInput.value;
 }
 function showTagError(message) { tagError.textContent = message; tagError.hidden = false; tagInput.setAttribute('aria-invalid', 'true'); }
@@ -208,6 +210,12 @@ tagInput.addEventListener('keydown', event => {
     }
 });
 byId('clear-tags').addEventListener('click', () => { tagInput.value = ''; applyTagQuery(); hideSuggestions(); tagInput.focus(); });
+clearFilters.addEventListener('click', () => {
+    queryInput.value = tagInput.value = yearSelect.value = typeSelect.value = '';
+    applyTagQuery();
+    hideSuggestions();
+    queryInput.focus();
+});
 queryInput.addEventListener('keydown', event => {
     if (event.key === 'Escape' && !event.isComposing) {
         queryInput.value = '';
@@ -285,7 +293,7 @@ function openDetails(entry, trigger, fromHistory = false) {
     switchTab('details');
     document.body.classList.add('panel-open');
     if (!panel.open) {
-        if (mobilePanel.matches)
+        if (modalPanel.matches)
             panel.showModal();
         else
             panel.show();
@@ -322,17 +330,17 @@ function switchTab(tab, focus = false) {
 });
 byId('close-panel').addEventListener('click', () => closeDetails());
 panel.addEventListener('cancel', event => { event.preventDefault(); closeDetails(); });
-mobilePanel.addEventListener('change', () => {
+modalPanel.addEventListener('change', () => {
     if (panel.open) {
         panel.close();
-        if (mobilePanel.matches)
+        if (modalPanel.matches)
             panel.showModal();
         else
             panel.show();
     }
 });
 document.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && !event.isComposing && panel.open && !mobilePanel.matches && !document.querySelector('.edit-dialog[open], #license-panel[open]') && event.target !== tagInput) {
+    if (event.key === 'Escape' && !event.isComposing && panel.open && !modalPanel.matches && !document.querySelector('.edit-dialog[open], #license-panel[open]') && event.target !== tagInput) {
         event.preventDefault();
         closeDetails();
     }
@@ -595,6 +603,7 @@ export function setLibrary(next, { reset = false } = {}) {
     byId('recent-wrap').hidden = !recent.length;
     byId('schema-message').hidden = next?.schemaReady !== false;
     byId('library-content').hidden = !next;
+    byId('library-filters').hidden = byId('library-toolbar').hidden = !entries.length;
     applyTagQuery();
     if (!next) return;
     const wasOpen = panel.open && !reset;

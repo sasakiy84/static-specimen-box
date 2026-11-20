@@ -327,6 +327,12 @@ input::placeholder {
   border-radius:10px;
   color:var(--muted)
 }
+.empty p {
+  margin: 0;
+}
+.empty .action-button {
+  margin-top: 12px;
+}
 .footer {
   display:flex;
   flex-wrap:wrap;
@@ -368,7 +374,12 @@ input::placeholder {
   padding:25px 25px 20px;
   border-bottom:1px solid var(--border)
 }
+.panel-header > div {
+  min-width: 0;
+}
 .panel-header h2 {
+  max-height: min(24dvh, 180px);
+  overflow: auto;
   font-size:20px;
   line-height:1.5;
   margin:5px 0 0;
@@ -534,13 +545,20 @@ input::placeholder {
   font-size:12px
 }
 
-@media(max-width:760px) {
+@media(max-width:960px) {
   body.panel-open {
-  overflow:hidden
+    overflow: hidden;
+  }
+  body.panel-open .page {
+    margin-right: auto;
+  }
+  .panel {
+    width: 100%;
+    border: 0;
+  }
 }
-body.panel-open .page {
-  margin-right:auto
-}
+
+@media(max-width:760px) {
 .page {
   padding:28px 16px 50px
 }
@@ -560,10 +578,6 @@ body.panel-open .page {
 .entry-id,.entry-year,.entry-citekey {
   display:inline;
   margin:0 10px 0 0
-}
-.panel {
-  width:100%;
-  border:0
 }
 .panel-header {
   padding:19px 17px 15px;
@@ -634,7 +648,7 @@ body.panel-open .page {
 .reference-card .copy-status:empty { display: none; }
 .reference-card .notice { font-size: 13px; overflow-wrap: anywhere; }
 
-@media(min-width:761px) {
+@media(min-width:961px) {
   body.panel-open .controls {
   grid-template-columns:1fr 1fr
 }
@@ -663,6 +677,8 @@ body.panel-open .toolbar {
   background: var(--surface);
 }
 .connection-actions, .edit-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.connection-progress { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
+.connection-actions .text-button[aria-disabled="true"] { opacity: .65; cursor: default; }
 .folder-link { margin-top: 10px; }
 .folder-link summary { width: fit-content; cursor: pointer; font-size: 13px; color: var(--accent); }
 .folder-link form { margin-top: 8px; }

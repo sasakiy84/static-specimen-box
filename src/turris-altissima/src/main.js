@@ -54,24 +54,39 @@ let formatterContext;
 let formatterLoading;
 let promptLoading;
 let isBusy = false;
-let authReady = false;
+let authReady = !googleEnabled;
+let restoringSession = false;
 let dirty = false;
 
 function setText(id, message) {
   const node = byId(id);
-  node.textContent = message;
+  if (node.textContent !== message) node.textContent = message;
   node.hidden = !message;
 }
 
 function updateButtons() {
-  connect.disabled = isBusy || !googleEnabled || !authReady;
+  const sample = readRoute().sample;
+  const driveReady = Boolean(connected && !sample && !restoringSession);
+  const progress = sample && !workspace?.isDemo ? 'サンプルを読み込んでいます…'
+    : restoringSession ? '前回の Google Drive 接続を復元しています…'
+    : !sample && !authReady && !connected ? 'Google Drive 接続を準備しています…' : '';
+  setText('connection-progress', progress);
+  setText('formatter-connection-progress', workspace ? '' : progress);
+  byId('formatter-unavailable').hidden = Boolean(workspace || progress || sample);
+  byId('formatter-connection-help').textContent = driveReady
+    ? '文献一覧で、接続する文献フォルダを選択してください。'
+    : '文献一覧で Google Drive に接続し、文献フォルダを選択してください。';
+  connect.hidden = !googleEnabled || sample || restoringSession || !authReady;
+  connect.disabled = isBusy;
   connect.textContent = connected ? 'アカウントを切り替え' : 'Google Drive に接続';
-  folderButton.hidden = !connected;
-  folderLink.hidden = !connected;
+  connect.classList.toggle('primary-action', !connected);
+  folderButton.hidden = folderLink.hidden = !driveReady;
+  folderButton.classList.toggle('primary-action', driveReady && !workspace);
   folderInput.disabled = isBusy;
   byId('open-folder-link').disabled = isBusy;
-  demoButton.hidden = Boolean(workspace?.isDemo);
-  disconnect.hidden = !connected && !workspace;
+  demoButton.hidden = sample;
+  demoButton.setAttribute('aria-disabled', String(isBusy));
+  disconnect.hidden = !driveReady && !workspace?.isDemo;
   disconnect.textContent = connected ? '接続を解除' : 'サンプルを閉じる';
   byId('workspace-bar').hidden = !workspace;
   byId('attachment-actions').hidden = !workspace || !currentEntry;
@@ -202,14 +217,19 @@ async function connectWith(session, remember = false) {
 }
 
 async function restoreConnection() {
-  if (readRoute().sample || connected) return;
+  if (!googleEnabled || readRoute().sample || connected) return;
   const session = loadDriveSession();
   if (!session) return;
+  restoringSession = true;
+  updateButtons();
   try {
     await connectWith(session);
   } catch (error) {
     if (error instanceof DriveError && error.status === 401) forgetDriveSession(session);
     throw error;
+  } finally {
+    restoringSession = false;
+    updateButtons();
   }
 }
 
@@ -279,7 +299,6 @@ function resetFormatter() {
   formatterContext = formatter = undefined;
   formatterRoot.replaceChildren();
   formatterRoot.hidden = true;
-  byId('formatter-unavailable').hidden = Boolean(workspace);
   setText('formatter-prefix', '');
   setText('formatter-message', '');
 }
@@ -346,16 +365,18 @@ function prepareFormatter() {
 }
 
 function preparePrompt() {
-  promptLoading ??= import('../formatter/prompt.txt?raw').then(({ default: prompt }) => {
+  if (promptLoading) return;
+  setText('prompt-status', 'プロンプトを読み込んでいます…');
+  promptLoading = import('../formatter/prompt.txt?raw').then(({ default: prompt }) => {
     byId('llm-prompt').textContent = prompt;
     byId('copy-prompt').disabled = false;
+    setText('prompt-status', '');
   }).catch(() => {
     setText('prompt-status', 'プロンプトを読み込めませんでした。');
     promptLoading = undefined;
   });
 }
 
-byId('copy-prompt').disabled = true;
 byId('copy-prompt').addEventListener('click', async () => {
   const prompt = byId('llm-prompt');
   try {
@@ -384,6 +405,7 @@ async function renderPage(focus = false) {
     link.href = pageUrl(link.dataset.route, link.dataset.sample === 'true' || route.sample);
   }
   syncLibraryRoute();
+  updateButtons();
   const heading = document.querySelector(`[data-page="${route.page}"] [data-page-heading]`);
   document.title = route.page === 'library' ? libraryTitle : `${heading.textContent} | ${libraryTitle}`;
   if (focus) {
@@ -403,10 +425,7 @@ async function renderPage(focus = false) {
       await selectWorkspace(demoDrive(), 'demo-root', 'demo', true);
     }, route.page === 'new' ? 'formatter-message' : 'workspace-error');
   }
-  if (readRoute().page === 'new') {
-    byId('formatter-unavailable').hidden = Boolean(workspace);
-    prepareFormatter();
-  }
+  if (readRoute().page === 'new') prepareFormatter();
 }
 
 document.addEventListener('click', event => {
