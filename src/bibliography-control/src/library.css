@@ -413,22 +413,33 @@ input::placeholder {
   margin-bottom:22px
 }
 .filename-row {
-  display:flex;
-  align-items:flex-start;
-  gap:12px;
-  margin-bottom:22px
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 22px;
 }
-.bib-filename {
-  flex:1;
-  min-width:0;
-  white-space:pre-wrap;
-  overflow-wrap:anywhere
+.filename-row .action-button { flex-shrink: 0; }
+.detail-copy {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
 }
-.filename-row .action-button {
-  flex-shrink:0
+.detail-copy-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
 }
-#filename-status:empty {
-  display:none
+.detail-copy-label {
+  flex: 1 1 115px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.detail-copy-row .copy-actions {
+  margin: 0;
+}
+#detail-copy-status:empty {
+  display: none;
 }
 .details {
   display:grid;
@@ -672,7 +683,7 @@ body.panel-open .toolbar {
 #workspace-status, #workspace-error { margin: 8px 0 0; }
 #entry-message { margin: 0; padding: 8px 24px; border-bottom: 1px solid var(--border); }
 #entry-message:empty, #editable-notes:empty { display: none; }
-#attachment-actions, #editable-notes { margin-top: 12px; }
+#attachment-actions, #editable-notes, #bib-annotations-actions { margin-top: 12px; }
 .primary-action { background: var(--accent); border-color: var(--accent); color: white; }
 .primary-action:hover:not(:disabled) { background: #1a4566; color: white; }
 button:disabled { cursor: default; opacity: .65; }
@@ -693,3 +704,24 @@ button:disabled { cursor: default; opacity: .65; }
 .formatter-dialog { width: min(1120px, calc(100% - 28px)); }
 .formatter-dialog > .pane-toolbar { margin-bottom: 16px; gap: 12px; }
 .clipboard-fallback { position: fixed; inset-inline-start: -9999px; }
+
+#edit-dialog[data-annotations] .bib-source {
+  height: clamp(110px, 19dvh, 170px);
+  min-height: 110px;
+}
+@media (max-width: 500px) {
+  .detail-copy-row:first-child .detail-copy-label { flex-basis: 100%; }
+}
+.bib-tag-editor { min-width: 0; margin: 16px 0 0; padding: 0; border: 0; }
+.bib-tag-editor legend { margin-bottom: 8px; font-weight: 700; }
+#bib-tag-selected:not(:empty) { margin-bottom: 12px; }
+.bib-tag-entry { display: flex; flex-wrap: wrap; gap: 8px; }
+.bib-tag-entry input {
+  flex: 1 1 165px;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid #a7bac9;
+  border-radius: 6px;
+  font: inherit;
+  color: inherit;
+}

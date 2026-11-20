@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>文献ライブラリ</title>
-  <script type="module" crossorigin src="./assets/index-CaInU-I3.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-Mn_EL2Oc.css">
+  <script type="module" crossorigin src="./assets/index-BBHIGwFa.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-BNFEuSir.css">
 </head>
 <body>
   <main class="page" id="main" data-page="library">
@@ -80,22 +80,25 @@
     <p id="entry-message" role="status" class="copy-status panel-message" hidden></p>
     <div class="panel-scroll">
       <section id="pane-details" role="tabpanel" aria-labelledby="tab-details" tabindex="0">
-        <div id="filename-row" class="filename-row" hidden><span id="bib-filename" class="bib-filename"></span><button id="copy-filename" type="button" class="action-button" aria-label="Bibファイル名をコピー">コピー</button></div>
-        <p id="filename-status" class="copy-status" role="status"></p>
+        <div id="detail-copy" class="detail-copy" role="group" aria-label="文献情報をコピー"></div>
+        <p id="detail-copy-status" class="copy-status" role="status"></p>
         <div id="detail-tags" class="tags detail-tags"></div><dl id="detail-fields" class="details"></dl>
-        <section id="memo-section" class="detail-section" hidden><h3>メモ</h3><div id="detail-memo" class="preserve-lines"></div></section>
+        <section id="memo-section" class="detail-section" hidden><h3>Bib のメモ</h3><div id="detail-memo" class="preserve-lines"></div></section>
+        <div id="bib-annotations-actions" class="connection-actions" hidden>
+          <button id="edit-bib-annotations" type="button" class="action-button" title="Bib ファイル内のメモとタグを編集します。">Bib のメモ・タグを編集</button>
+        </div>
         <section id="abstract-section" class="detail-section" hidden><h3>抄録</h3><div id="detail-abstract" class="preserve-lines"></div></section>
         <section class="detail-section"><h3>資料</h3><nav id="detail-links" class="links" aria-label="原文とノートのリンク"></nav>
           <div id="attachment-actions" class="connection-actions" hidden>
-            <button id="attach-original" type="button" class="action-button">原文を追加</button>
-            <button id="new-note" type="button" class="action-button">ノートを作成</button>
+            <button id="attach-original" type="button" class="action-button" title="論文の PDF などを選び、Google Drive の Originals フォルダに保存します。">原文を追加</button>
+            <button id="new-note" type="button" class="action-button" title="Google Drive の Notes フォルダに、独立した Markdown ファイルを作成します。">ノートを作成</button>
             <input id="attachment-file" type="file" hidden>
           </div>
           <div id="editable-notes"></div>
 </section>
       </section>
       <section id="pane-bib" role="tabpanel" aria-labelledby="tab-bib" hidden>
-        <div class="pane-toolbar"><label for="bib-source">Bib本文</label><button id="edit-bib" type="button" class="action-button" hidden>Bib を編集</button><button id="copy-bib" type="button" class="action-button">全文をコピー</button></div>
+        <div class="pane-toolbar"><label for="bib-source">Bib本文</label><button id="edit-bib" type="button" class="action-button" title="Bib ファイルの本文を開いて編集します。" hidden>Bib を編集</button><button id="copy-bib" type="button" class="action-button">全文をコピー</button></div>
         <textarea id="bib-source" class="bib-source" readonly spellcheck="false" aria-label="元のBib本文"></textarea>
         <p id="bib-status" class="copy-status" role="status"></p>
       </section>
@@ -120,8 +123,22 @@
     <form id="edit-form">
       <div class="pane-toolbar"><h2 id="edit-title"></h2><button id="close-edit" type="button" class="action-button">閉じる</button></div>
       <p id="edit-file" class="updated"></p>
-      <label for="edit-source">原文</label>
+      <label id="edit-source-label" for="edit-source">原文</label>
       <textarea id="edit-source" class="bib-source" spellcheck="false" required></textarea>
+      <fieldset id="bib-tag-editor" class="bib-tag-editor" hidden>
+        <legend>タグ</legend>
+        <div id="bib-tag-selected" class="tags" aria-label="選択したタグ"></div>
+        <label for="bib-tag-input">追加するタグ</label>
+        <div class="bib-tag-entry">
+          <input id="bib-tag-input" type="text" autocomplete="off">
+          <button id="add-bib-tag" type="button" class="action-button">タグを追加</button>
+        </div>
+        <p id="bib-tag-error" class="field-error" role="alert" hidden></p>
+        <div id="bib-tag-candidates-wrap">
+          <p class="field-help">文献ライブラリのタグ候補</p>
+          <div id="bib-tag-candidates" class="tags"></div>
+        </div>
+      </fieldset>
       <p id="edit-error" class="field-error" role="alert" hidden></p>
       <div class="edit-actions"><button id="save-edit" type="submit" class="action-button primary-action">Drive に保存</button></div>
     </form>

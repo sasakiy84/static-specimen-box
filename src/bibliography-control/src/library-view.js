@@ -1,7 +1,7 @@
 import { LibraryCore } from './library-core.js';
 import { ReferenceFormats } from './citations.js';
 import { citationAssets } from './citation-assets.js';
-import { readRoute } from './routes.js';
+import { pageUrl, readRoute } from './routes.js';
 
 const names = { __proto__: null, article: '雑誌論文', inproceedings: '会議論文', conference: '会議論文', proceedings: '会議録', book: '書籍', inbook: '書籍の章', incollection: '論集所収', thesis: '学位論文', phdthesis: '博士論文', mastersthesis: '修士論文', online: 'オンライン資料', report: '報告書', misc: 'その他' };
 const byId = id => document.getElementById(id);
@@ -263,10 +263,7 @@ function openDetails(entry, trigger, fromHistory = false) {
     panel.dispatchEvent(new CustomEvent('libraryentry', { detail: entry }));
     byId('detail-title').textContent = entry.title || '（タイトル未設定）';
     byId('detail-id').textContent = entry.id + ' · ' + (names[entry.entrytype] || entry.entrytype);
-    byId('bib-filename').textContent = entry.bib_filename || '';
-    byId('filename-row').hidden = !entry.bib_filename;
-    byId('copy-filename').disabled = !entry.bib_filename;
-    byId('filename-status').textContent = '';
+    renderDetailCopies(entry);
     byId('detail-tags').replaceChildren(...(entry.tags || []).map(tag => tagButton(tag)));
     byId('detail-fields').replaceChildren();
     const fields = entry.bib_fields || {};
@@ -499,7 +496,63 @@ async function copyAction(button, status, operation) {
     }
 }
 byId('copy-bib').addEventListener('click', () => copyAction(byId('copy-bib'), byId('bib-status'), () => copyText(selectedEntry.bib_source)));
-byId('copy-filename').addEventListener('click', () => copyAction(byId('copy-filename'), byId('filename-status'), () => copyText(selectedEntry.bib_filename)));
+async function copyEntryLink(text, url) {
+    const markdown = '[' + text.replace(/[\\[\]]/g, '\\$&') + '](' + url.href + ')';
+    if (window.ClipboardItem && navigator.clipboard?.write) {
+        const anchor = document.createElement('a');
+        anchor.href = url.href;
+        anchor.textContent = text;
+        try {
+            await navigator.clipboard.write([new ClipboardItem({
+                'text/html': new Blob([anchor.outerHTML], { type: 'text/html' }),
+                'text/plain': new Blob([markdown], { type: 'text/plain' })
+            })]);
+            return;
+        } catch { /* HTML をコピーできない場合は Markdown でリンクを渡す。 */ }
+    }
+    await copyText(markdown);
+}
+
+function renderDetailCopies(entry) {
+    const status = byId('detail-copy-status');
+    status.textContent = '';
+    const fields = entry.bib_fields || {};
+    const people = ReferenceFormats.parseNames(fields.author || fields.editor || entry.author);
+    const first = people[0];
+    const surname = first?.family || first?.literal;
+    const authorYear = surname && entry.year ? surname + (people.length > 1 ? '+' : '') + ' ' + entry.year : '';
+    const url = pageUrl('library', readRoute().sample);
+    url.searchParams.set('entry', entry.id);
+    const rows = [];
+    for (const [label, text] of [
+        ['Bib ファイル名', entry.bib_filename?.replace(/\.bib$/i, '')],
+        ['著者名と年', authorYear],
+        ['文献 ID', entry.id],
+    ]) {
+        if (!text) continue;
+        const row = document.createElement('div');
+        row.className = 'detail-copy-row';
+        row.setAttribute('role', 'group');
+        row.setAttribute('aria-label', label);
+        const value = document.createElement('span');
+        value.className = 'detail-copy-label';
+        value.textContent = text;
+        const buttons = document.createElement('div');
+        buttons.className = 'copy-actions';
+        for (const [name, operation] of [['コピー', () => copyText(text)], ['リンク付きコピー', () => copyEntryLink(text, url)]]) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'action-button';
+            button.textContent = name;
+            button.setAttribute('aria-label', label + 'を' + name);
+            button.addEventListener('click', () => copyAction(button, status, operation));
+            buttons.append(button);
+        }
+        row.append(value, buttons);
+        rows.push(row);
+    }
+    byId('detail-copy').replaceChildren(...rows);
+}
 byId('show-licenses').addEventListener('click', async () => {
     byId('license-text').textContent = 'ライセンスを読み込んでいます…';
     if (!byId('license-panel').open) byId('license-panel').showModal();

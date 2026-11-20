@@ -1,5 +1,5 @@
 // CSV の生成規則を変えたときは、この値を進めて前回の生成結果を再検証する。
-export const catalogRevision = 1;
+export const catalogRevision = 2;
 
 const CSV_COLUMNS = [
     'id', 'citekey', 'entrytype', 'title', 'author', 'date', 'year',
@@ -35,6 +35,7 @@ function buildCatalogEntries_(bibs, originalFiles, noteFiles) {
         const entry = parsed[0];
         const fields = entry.fields;
         const raw = entry.rawFields;
+        const { note, tags } = bibAnnotations(raw);
         const date = fields.date || fields.year || '';
         const year = fields.year || (date.match(/\b\d{4}\b/) || [''])[0];
         entries.push({
@@ -59,8 +60,8 @@ function buildCatalogEntries_(bibs, originalFiles, noteFiles) {
             bib_url: bib.url,
             originals: JSON.stringify(originals.get(id) || []),
             notes: JSON.stringify(notes.get(id) || []),
-            tags: JSON.stringify(parseTags_(raw._tags || '')),
-            bib_notes: (raw._notes || '').replace(/\r\n?/g, '\n').trim(),
+            tags: JSON.stringify(tags),
+            bib_notes: note,
             bib_source: bib.content,
             bib_modified_at: bib.modifiedAt || '',
             bib_fields: JSON.stringify(raw),
@@ -102,11 +103,10 @@ function csvCell_(value) {
 /**
  * BibLaTeXを走査する。表示値と原文のフィールド値を別に保持する。
  * 波括弧内の引用符は文字として扱い、引用符で囲まれた値だけで引用状態を切り替える。
- * @param {string} source
- * @returns {{entrytype: string, citekey: string, fields: Object<string,string>, rawFields: Object<string,string>}[]}
+ * @param {string} text
+ * @param {boolean} [trackValues]
  */
-function parseBibFile_(source) {
-    const text = source.replace(/^\uFEFF/, '');
+function parseBibFile_(text, trackValues = false) {
     const entries = [];
     let cursor = 0;
     while (cursor < text.length) {
@@ -168,15 +168,18 @@ function parseBibFile_(source) {
         const citekey = body.slice(0, comma).trim();
         if (!citekey)
             throw new Error('@' + kind + ' の引用キーが空です');
-        const rawFields = parseBibFields_(body.slice(comma + 1), true);
+        const fieldStart = start + comma + 1;
+        const valueRanges = trackValues ? new Map() : null;
+        const recordValue = valueRanges && ((name, from, to) =>
+            valueRanges.set(name, [fieldStart + from, fieldStart + to]));
+        const rawFields = parseBibFields_(text.slice(fieldStart, end), recordValue);
         const fields = Object.create(null);
         Object.keys(rawFields).forEach(key => fields[key] = decodeBibText_(rawFields[key]));
-        entries.push({ entrytype: kind, citekey: citekey, fields: fields, rawFields: rawFields });
+        entries.push({ entrytype: kind, citekey: citekey, fields: fields, rawFields, valueRanges, fieldStart });
     }
     return entries;
 }
-/** @param {string} body @param {boolean=} raw @returns {Object<string,string>} */
-function parseBibFields_(body, raw) {
+function parseBibFields_(body, onValue) {
     const fields = Object.create(null);
     let i = 0;
     function whitespace() {
@@ -240,17 +243,21 @@ function parseBibFields_(body, raw) {
         if (body[i++] !== '=')
             throw new Error(name + ' に = がありません');
         whitespace();
+        const start = i;
         let value = fragment();
+        let end = i;
         whitespace();
         while (body[i] === '#') {
             i++;
             whitespace();
             value += fragment();
+            end = i;
             whitespace();
         }
         if (Object.prototype.hasOwnProperty.call(fields, name))
             throw new Error('フィールドが重複しています: ' + name);
-        fields[name] = raw ? value : decodeBibText_(value);
+        fields[name] = value;
+        onValue?.(name, start, end);
         if (i < body.length) {
             if (body[i] !== ',')
                 throw new Error(name + ' の後にコンマがありません');
@@ -259,19 +266,71 @@ function parseBibFields_(body, raw) {
     }
     return fields;
 }
-/** @param {string} value @param {boolean=} preserveLines @returns {string} */
-function decodeBibText_(value, preserveLines) {
-    // エスケープされた波括弧は本文として保持する。_notesの改行を潰さない。
+/** @param {string} value @returns {string} */
+function decodeBibText_(value) {
+    // エスケープされた波括弧は本文として保持する。
     const text = String(value).replace(/\r\n?/g, '\n')
         .replace(/\\([&%_#{}$])/g, (_, char) => char === '{' ? '\uE000' : char === '}' ? '\uE001' : char)
         .replace(/\\(?:textit|emph|textbf)\s*\{/g, '{')
         .replace(/[{}]/g, '').replace(/~/g, ' ')
         .replace(/\uE000/g, '{').replace(/\uE001/g, '}');
-    return preserveLines ? text.trim() : text.replace(/\s+/g, ' ').trim();
+    return text.replace(/\s+/g, ' ').trim();
 }
-/** @param {string} raw @returns {string[]} */
-function parseTags_(raw) {
-    return Array.from(new Set(String(raw).split(',').map(tag => tag.trim()).filter(Boolean)));
+const customEscapes = { '\\': '\\textbackslash{}', '{': '\\{', '}': '\\}' };
+
+function escapeCustomText(text) {
+    return text.replace(/[\\{}]/g, character => customEscapes[character]);
+}
+
+function unescapeCustomText(text) {
+    return text.replace(/\\(textbackslash\{\}|textasciitilde\{\}|textasciicircum\{\}|[{}&%$#_])/g, (_, value) =>
+        ({ 'textbackslash{}': '\\', 'textasciitilde{}': '~', 'textasciicircum{}': '^' })[value] ?? value);
+}
+
+function bibAnnotations(fields) {
+    const note = unescapeCustomText((fields._notes || '').replace(/\r\n?/g, '\n').trim());
+    const tags = (fields._tags || '').split(',').map(tag => unescapeCustomText(tag.trim())).filter(Boolean);
+    return { note, tags: [...new Set(tags)] };
+}
+
+function singleBib(source, trackValues = false) {
+    const entries = parseBibFile_(source, trackValues);
+    if (entries.length !== 1) throw new Error('Bib に書誌エントリが1件あることを確認してください。');
+    return entries[0];
+}
+
+export function readBibAnnotations(source) {
+    const { rawFields } = singleBib(source);
+    return { ...bibAnnotations(rawFields), fields: rawFields };
+}
+
+export function writeBibAnnotations(source, note, tags) {
+    const { rawFields, valueRanges, fieldStart } = singleBib(source, true);
+    const current = bibAnnotations(rawFields);
+    const nextNote = note.replace(/\r\n?/g, '\n').trim();
+    const nextTags = [...new Set(tags.map(tag => tag.trim()).filter(Boolean))];
+    if (nextTags.some(tag => /[,\r\n]/.test(tag))) throw new Error('タグにカンマや改行を含めることはできません。');
+    const updates = [];
+    const additions = [];
+    const newline = source.includes('\r\n') ? '\r\n' : '\n';
+    for (const [name, value, changed] of [
+        ['_notes', nextNote.replaceAll('\n', newline), current.note !== nextNote],
+        ['_tags', nextTags.join(', '), JSON.stringify(current.tags) !== JSON.stringify(nextTags)],
+    ]) {
+        if (!changed) continue;
+        const written = '{' + escapeCustomText(value) + '}';
+        const range = valueRanges.get(name);
+        if (range) updates.push([...range, written]);
+        else additions.push('  ' + name + ' = ' + written + ',');
+    }
+    if (additions.length) {
+        const suffix = /^[ \t]*\r?\n/.test(source.slice(fieldStart)) ? '' : newline;
+        updates.push([fieldStart, fieldStart, newline + additions.join(newline) + suffix]);
+    }
+    for (const [from, to, replacement] of updates.sort((left, right) => right[0] - left[0])) {
+        source = source.slice(0, from) + replacement + source.slice(to);
+    }
+    return source;
 }
 
 function parseCatalogRows_(rows) {

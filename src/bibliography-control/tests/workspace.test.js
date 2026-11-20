@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { demoDrive } from '../src/demo.js';
+import { readBibAnnotations, writeBibAnnotations } from '../src/catalog.js';
 import { createWorkspace } from '../src/workspace.js';
 
 test('reuses the CSV and indexes Bib and attachments by the first underscore', async () => {
@@ -187,4 +188,34 @@ test('continues with the current page cache when browser storage is unavailable'
   const calls = trackDriveCalls(drive);
   assert.equal((await workspace.rebuild()).changed, false);
   assert.equal(calls.length, 8);
+});
+
+
+test('adds multiline Bib notes and tags without changing existing source', async () => {
+  const source = '\ufeff% header\r\n@comment{ignore}\r\n@book{Key, % comment\r\n    title={A},\r\n    unknown={Keep}\r\n}\r\n';
+  const note = '1行目 {注}\n2行目 \\ Unicode';
+  const tags = ['日本語', '{tag}', 'foo\\bar', '日本語'];
+  const edited = writeBibAnnotations(source, note, tags);
+  const added = edited.slice(source.indexOf(', % comment') + 1, edited.indexOf(' % comment'));
+  assert.equal(edited.replace(added, ''), source);
+  assert.deepEqual(readBibAnnotations(edited).tags, tags.slice(0, 3));
+  assert.equal(readBibAnnotations(edited).note, note);
+
+  const drive = demoDrive();
+  const workspace = await createWorkspace(drive, 'demo-root');
+  const draft = await workspace.openText('Bibs', await workspace.findBib('MA0001'));
+  await workspace.saveText(draft, edited);
+  const { entries } = await workspace.rebuild();
+  const entry = entries.find(row => row.id === 'MA0001');
+  assert.deepEqual(entry.tags, tags.slice(0, 3));
+  assert.equal(entry.bib_notes, note);
+  assert.equal(entry.bib_source, edited);
+});
+
+test('only rewrites the values of Bib annotations that changed', () => {
+  const source = '@book{Key,\n  _notes = "Keep " # {this}, % comment\n  _tags = {reading},\n  title = {Original}\n}\n';
+  assert.equal(writeBibAnnotations(source, 'Keep this', ['reading']), source);
+  assert.equal(writeBibAnnotations(source, 'Keep this', ['reading', 'other']), source.replace('{reading}', '{reading, other}'));
+  assert.equal(writeBibAnnotations(source, '', ['reading']), source.replace('"Keep " # {this}', '{}'));
+  assert.throws(() => writeBibAnnotations(source, 'Keep this', ['comma,tag']), /カンマ/);
 });

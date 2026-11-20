@@ -5,6 +5,7 @@ import { googleConfig } from './google-config.js';
 import { authorize, loadIdentity, pickFolder, revoke } from './google-auth.js';
 import { createDrive, DriveError, folderIdFromLink, getAccessToken } from './drive.js';
 import { createWorkspace } from './workspace.js';
+import { readBibAnnotations, writeBibAnnotations } from './catalog.js';
 import { browserCatalogCache } from './catalog-cache.js';
 import { demoDrive } from './demo.js';
 import { forgetDriveSession, loadDriveSession, saveDriveSession } from './drive-session.js';
@@ -23,6 +24,7 @@ const refresh = byId('refresh-csv');
 const newEntry = byId('new-entry');
 const details = byId('detail-panel');
 const editButton = byId('edit-bib');
+const editAnnotations = byId('edit-bib-annotations');
 const attachButton = byId('attach-original');
 const noteButton = byId('new-note');
 const upload = byId('attachment-file');
@@ -31,6 +33,11 @@ const formatterPage = byId('formatter-page');
 const formatterRoot = byId('formatter-root');
 const routeLinks = [...document.querySelectorAll('a[data-route]')];
 const editSource = byId('edit-source');
+const tagEditor = byId('bib-tag-editor');
+const tagEntry = byId('bib-tag-input');
+const selectedTags = byId('bib-tag-selected');
+const tagCandidates = byId('bib-tag-candidates');
+const tagsCollator = new Intl.Collator('ja', { numeric: true, sensitivity: 'base' });
 const googleEnabled = location.origin === googleConfig.origin || import.meta.env.DEV;
 const caption = new Intl.DateTimeFormat('ja-JP', {
   timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
@@ -68,8 +75,11 @@ function updateButtons() {
   byId('workspace-bar').hidden = !workspace;
   byId('attachment-actions').hidden = !workspace || !currentEntry;
   editButton.hidden = !workspace || !currentEntry;
+  byId('bib-annotations-actions').hidden = editButton.hidden;
+  tagEditor.disabled = isBusy;
+  editSource.readOnly = isBusy;
   newEntry.setAttribute('aria-disabled', String(isBusy));
-  for (const button of [disconnect, folderButton, refresh, editButton, attachButton, noteButton, byId('save-edit'), byId('close-edit')]) {
+  for (const button of [disconnect, folderButton, refresh, editButton, editAnnotations, attachButton, noteButton, byId('save-edit'), byId('close-edit')]) {
     button.disabled = isBusy;
   }
 }
@@ -412,13 +422,64 @@ function requireCurrentEntry() {
   return { context: workspace, entry: currentEntry };
 }
 
+function tagChoice(tag, label, description, choose) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'tag';
+  button.textContent = label;
+  button.title = description;
+  button.setAttribute('aria-label', description);
+  button.addEventListener('click', () => choose(tag));
+  return button;
+}
+
+function renderBibTagEditor() {
+  const { tags, candidates } = activeEdit;
+  const query = tagEntry.value.trim().toLocaleLowerCase();
+  const suggestions = candidates.filter(tag => !tags.includes(tag) && tag.toLocaleLowerCase().includes(query)).slice(0, 12);
+  selectedTags.replaceChildren(...tags.map(tag =>
+    tagChoice(tag, tag + ' ×', 'タグ「' + tag + '」を取り消す', value => {
+      activeEdit.tags = activeEdit.tags.filter(current => current !== value);
+      renderBibTagEditor();
+      tagEntry.focus();
+    })));
+  tagCandidates.replaceChildren(...suggestions.map(tag =>
+    tagChoice(tag, tag, '候補タグ「' + tag + '」を追加', value => addBibTag(value))));
+  byId('bib-tag-candidates-wrap').hidden = !suggestions.length;
+}
+
+function addBibTag(value) {
+  const tag = value.trim();
+  if (!activeEdit?.annotations || /[,\r\n]/.test(tag)) {
+    setText('bib-tag-error', 'タグはカンマや改行を含めず、1件ずつ入力してください。');
+    return false;
+  }
+  if (tag && !activeEdit.tags.includes(tag)) activeEdit.tags.push(tag);
+  tagEntry.value = '';
+  setText('bib-tag-error', '');
+  renderBibTagEditor();
+  tagEntry.focus();
+  return true;
+}
+
 function openEditor(data) {
   activeEdit = data;
-  setText('edit-title', data.folder === 'Bibs' ? 'Bib を編集' : 'ノートを編集');
+  const isBib = data.folder === 'Bibs';
+  const isAnnotations = Boolean(data.annotations);
+  setText('edit-title', isAnnotations ? 'Bib のメモ・タグを編集' : isBib ? 'Bib を編集' : 'ノートを編集');
   setText('edit-file', data.file?.name || data.entryId);
   byId('save-edit').textContent = workspace.isDemo ? 'サンプルに保存' : 'Drive に保存';
   setText('edit-error', '');
-  editSource.value = data.content;
+  editDialog.toggleAttribute('data-annotations', isAnnotations);
+  byId('edit-source-label').textContent = isAnnotations ? 'Bib 内のメモ' : '原文';
+  editSource.required = !isAnnotations;
+  editSource.value = isAnnotations ? data.annotations.note : data.content;
+  tagEditor.hidden = !isAnnotations;
+  if (isAnnotations) {
+    tagEntry.value = '';
+    setText('bib-tag-error', '');
+    renderBibTagEditor();
+  }
   editDialog.showModal();
   editSource.focus();
 }
@@ -436,6 +497,7 @@ async function showNotes(context, entry) {
       button.type = 'button';
       button.className = 'action-button';
       button.textContent = `${file.name} を編集`;
+      button.title = 'Drive の Notes フォルダにある Markdown ファイルを編集します。';
       button.addEventListener('click', () => action(async () => {
         const data = await context.service.openText('Notes', file);
         if (isCurrent()) openEditor({ ...data, context });
@@ -458,13 +520,34 @@ details.addEventListener('close', () => {
   if (!details.open) currentEntry = undefined;
 });
 
-editButton.addEventListener('click', () => action(async () => {
+async function openBibEditor(annotationsOnly) {
   const { context, entry } = requireCurrentEntry();
   const file = await context.service.findBib(entry.id);
   if (!file.capabilities?.canEdit) throw new Error('この Bib を編集する権限がありません。');
   const data = await context.service.openText('Bibs', file);
-  if (currentEntry === entry && details.open) openEditor({ ...data, context });
-}, 'entry-message'));
+  if (currentEntry !== entry || !details.open) return;
+  if (annotationsOnly) {
+    data.entryId = entry.id;
+    data.annotations = readBibAnnotations(data.content);
+    data.tags = [...data.annotations.tags];
+    data.candidates = [...new Set(catalog.entries.flatMap(item => item.tags))]
+      .sort((left, right) => tagsCollator.compare(left, right));
+  }
+  openEditor({ ...data, context });
+}
+
+editButton.addEventListener('click', () => action(() => openBibEditor(false), 'entry-message'));
+editAnnotations.addEventListener('click', () => action(() => openBibEditor(true), 'entry-message'));
+byId('add-bib-tag').addEventListener('click', () => addBibTag(tagEntry.value));
+tagEntry.addEventListener('input', () => {
+  setText('bib-tag-error', '');
+  renderBibTagEditor();
+});
+tagEntry.addEventListener('keydown', event => {
+  if (event.key !== 'Enter' || event.isComposing) return;
+  event.preventDefault();
+  addBibTag(tagEntry.value);
+});
 noteButton.addEventListener('click', () => {
   if (isBusy || !workspace || !currentEntry) return;
   openEditor({ folder: 'Notes', entryId: currentEntry.id, content: '', context: workspace });
@@ -483,23 +566,47 @@ upload.addEventListener('change', () => {
 });
 
 function mayCloseEditor() {
-  return !isBusy && (editSource.value === activeEdit?.content || confirm('保存していない編集内容を破棄しますか？'));
+  if (isBusy) return false;
+  const previous = activeEdit?.annotations;
+  const changed = previous
+    ? editSource.value !== previous.note || JSON.stringify(activeEdit.tags) !== JSON.stringify(previous.tags) || Boolean(tagEntry.value.trim())
+    : editSource.value !== activeEdit?.content;
+  return !changed || confirm('保存していない編集内容を破棄しますか？');
 }
 byId('close-edit').addEventListener('click', () => { if (mayCloseEditor()) editDialog.close(); });
 editDialog.addEventListener('cancel', event => { if (!mayCloseEditor()) event.preventDefault(); });
 editDialog.addEventListener('close', () => { if (!editDialog.open) activeEdit = undefined; });
 byId('edit-form').addEventListener('submit', event => {
   event.preventDefault();
+  if (isBusy) return;
+  if (activeEdit?.annotations && tagEntry.value.trim() && !addBibTag(tagEntry.value)) return;
   void action(async () => {
     if (!activeEdit || activeEdit.context !== workspace) throw new Error('ファイルを開き直してください。');
-    const { file, context, entryId } = activeEdit;
-    const content = editSource.value;
+    const { file, context, entryId, annotations, tags } = activeEdit;
+    const content = annotations ? writeBibAnnotations(activeEdit.content, editSource.value, tags) : editSource.value;
+    if (annotations && content === activeEdit.content) {
+      editDialog.close();
+      return;
+    }
     const saved = file
       ? await context.service.saveText(activeEdit, content)
       : await context.service.createNote(entryId, content);
     editDialog.close();
+    if (annotations) {
+      const updated = readBibAnnotations(content);
+      const entries = catalog.entries.map(entry => entry.id === entryId ? {
+        ...entry,
+        bib_source: content,
+        bib_fields: updated.fields,
+        bib_notes: updated.note,
+        bib_modified_at: saved.modifiedTime,
+        tags: updated.tags,
+      } : entry);
+      setCatalog({ ...catalog, entries });
+    } else {
+      void showNotes(context, currentEntry);
+    }
     afterWrite(`${saved.name} を保存しました。一覧と CSV を更新してください。`);
-    void showNotes(context, currentEntry);
   }, 'edit-error');
 });
 
