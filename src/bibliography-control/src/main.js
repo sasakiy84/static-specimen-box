@@ -3,7 +3,7 @@ import '../formatter/formatter.css';
 import { setLibrary } from './library-view.js';
 import { googleConfig } from './google-config.js';
 import { authorize, loadIdentity, pickFolder, revoke } from './google-auth.js';
-import { createDrive, DriveError } from './drive.js';
+import { createDrive, DriveError, folderIdFromLink } from './drive.js';
 import { createWorkspace } from './workspace.js';
 import { demoDrive } from './demo.js';
 import { discardDraft } from '../formatter/src/draft.ts';
@@ -12,6 +12,9 @@ const byId = id => document.getElementById(id);
 const connect = byId('connect-drive');
 const disconnect = byId('disconnect-drive');
 const folderButton = byId('choose-folder');
+const folderLink = byId('folder-link');
+const folderForm = byId('folder-link-form');
+const folderInput = byId('folder-link-input');
 const demoButton = byId('open-demo');
 const refresh = byId('refresh-csv');
 const newEntry = byId('new-entry');
@@ -48,6 +51,9 @@ function updateButtons() {
   connect.disabled = isBusy || !googleEnabled || !authReady;
   connect.textContent = connected ? 'アカウントを切り替え' : 'Google Drive に接続';
   folderButton.hidden = !connected;
+  folderLink.hidden = !connected;
+  folderInput.disabled = isBusy;
+  byId('open-folder-link').disabled = isBusy;
   demoButton.hidden = Boolean(workspace?.isDemo);
   disconnect.hidden = !connected && !workspace;
   disconnect.textContent = connected ? '接続を解除' : 'サンプルを閉じる';
@@ -85,6 +91,7 @@ function clearWorkspace({ reset = true } = {}) {
   dirty = false;
   editDialog.close();
   formatterDialog.close();
+  resetFolderLink();
   setCatalog(null, reset && hadWorkspace);
   setText('workspace-name', '');
   setText('workspace-status', '');
@@ -120,6 +127,11 @@ async function action(operation, errorTarget = 'workspace-error') {
   }
 }
 
+function resetFolderLink() {
+  folderLink.open = false;
+  folderForm.reset();
+}
+
 async function selectWorkspace(drive, id, userId, isDemo = false) {
   const next = await createWorkspace(drive, id);
   let nextCatalog;
@@ -138,6 +150,7 @@ async function selectWorkspace(drive, id, userId, isDemo = false) {
   setText('workspace-name', `${next.root.name} · ${label}`);
   setCatalog(nextCatalog, reset);
   setText('workspace-status', nextCatalog.modifiedAt ? '' : '「一覧・CSV を更新」で文献一覧を生成できます。');
+  resetFolderLink();
   if (!isDemo) rememberFolder(userId, next.root.id);
 }
 
@@ -170,6 +183,15 @@ folderButton.addEventListener('click', () => action(async () => {
   const id = await pickFolder(connected.session.token);
   if (id) await selectWorkspace(connected.drive, id, connected.user.permissionId);
 }));
+folderForm.addEventListener('submit', event => {
+  event.preventDefault();
+  if (!connected) return;
+  void action(async () => {
+    const id = folderIdFromLink(folderInput.value);
+    await selectWorkspace(connected.drive, id, connected.user.permissionId);
+    folderLink.querySelector('summary').focus();
+  });
+});
 disconnect.addEventListener('click', () => {
   if (connected) revoke(connected.session.token);
   connected = undefined;

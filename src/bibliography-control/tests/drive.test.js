@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createDrive } from '../src/drive.js';
+import { createDrive, folderIdFromLink } from '../src/drive.js';
 
 const session = { token: 'test-token', expiresAt: Date.now() + 3600_000 };
 
@@ -60,4 +60,18 @@ test('uploads a large file to the resumable session issued by the Drive API', as
   });
   assert.deepEqual(await drive.create('folder-1', 'MA0001_原文.pdf', new Blob(['x'.repeat(5_000_001)]), 'application/pdf'), { id: 'file-1' });
   assert.equal(requests, 2);
+});
+
+test('accepts Drive folder links from multiple accounts and plain folder IDs', () => {
+  assert.equal(folderIdFromLink(' https://drive.google.com/drive/u/1/folders/a-B_2?usp=sharing '), 'a-B_2');
+  assert.equal(folderIdFromLink('https://drive.google.com/drive/folders/a-B_2/'), 'a-B_2');
+  assert.equal(folderIdFromLink('https://drive.google.com/open?id=a-B_2'), 'a-B_2');
+  assert.equal(folderIdFromLink(' a-B_2 '), 'a-B_2');
+});
+
+test('rejects outside hosts, non-folder links and IDs with path separators', () => {
+  for (const input of ['https://drive.google.com.example.org/drive/folders/valid',
+    'https://drive.google.com/file/d/valid/view', 'https://drive.google.com/open?id=bad%2Fid', '']) {
+    assert.throws(() => folderIdFromLink(input), /フォルダ ID/);
+  }
 });

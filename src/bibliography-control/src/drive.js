@@ -14,6 +14,22 @@ export function validateFileId(id) {
   return id;
 }
 
+export function folderIdFromLink(value) {
+  const text = value.trim();
+  if (/^[a-zA-Z0-9_-]+$/.test(text)) return text;
+
+  const message = 'Google Drive のフォルダのリンクまたはフォルダ ID を入力してください。';
+  let url;
+  try { url = new URL(text); }
+  catch { throw new Error(message); }
+  if (url.origin === 'https://drive.google.com' && !url.username && !url.password) {
+    const folderPath = /^\/drive\/(?:u\/\d+\/)?folders\/([a-zA-Z0-9_-]+)\/?$/.exec(url.pathname);
+    const id = folderPath?.[1] ?? (['/open', '/folderview'].includes(url.pathname) ? url.searchParams.get('id') : null);
+    if (id && /^[a-zA-Z0-9_-]+$/.test(id)) return id;
+  }
+  throw new Error(message);
+}
+
 export function createDrive(session, request = fetch) {
   async function send(url, options = {}) {
     if (Date.now() >= session.expiresAt) throw new DriveError(401, 'Google Drive の接続期限が切れました。再接続してください。');

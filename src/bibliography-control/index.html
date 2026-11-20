@@ -16,6 +16,16 @@
         <button id="disconnect-drive" type="button" class="text-button" hidden>接続を解除</button>
         <button id="open-demo" type="button" class="text-button">サンプルを見る</button>
       </div>
+      <details id="folder-link" class="folder-link" hidden>
+        <summary>フォルダのリンクを入力</summary>
+        <form id="folder-link-form">
+          <label for="folder-link-input">Google Drive のフォルダのリンク</label>
+          <div class="folder-link-fields">
+            <input id="folder-link-input" type="text" placeholder="https://drive.google.com/drive/folders/…" autocomplete="off" spellcheck="false" required>
+            <button id="open-folder-link" type="submit" class="action-button">このフォルダを開く</button>
+          </div>
+        </form>
+      </details>
       <div id="workspace-bar" hidden>
         <p id="workspace-name" class="workspace-name"></p>
         <div class="connection-actions">
