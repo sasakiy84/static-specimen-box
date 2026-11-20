@@ -6,3 +6,6 @@
 
 /img2pdf/*
   Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src blob:; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+
+/image-compressor/*
+  Content-Security-Policy: default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; worker-src 'self' blob:; img-src blob:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'

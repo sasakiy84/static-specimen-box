@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="画像の画質やピクセル数を調整し、保存サイズを確認しながらブラウザ内で圧縮できます。">
+  <title>画像圧縮ツール</title>
+  <script type="module" crossorigin src="./assets/index-orQRG2H9.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-DDPHn_sS.css">
+</head>
+<body>
+  <main>
+    <h1>画像圧縮ツール</h1>
+    <section class="card" aria-label="画像を圧縮する">
+      <div id="dropzone" class="dropzone">
+        <strong>画像をここにドロップ</strong>
+        <label class="file-button">
+          画像を選択
+          <input id="file" type="file" disabled accept="image/jpeg,image/png,image/webp,image/avif,.jpg,.jpeg,.png,.webp,.avif">
+        </label>
+        <p class="muted">JPEG・PNG・WebP・AVIF の静止画</p>
+      </div>
+      <p id="error" role="alert" class="error" hidden></p>
+      <section id="editor" class="editor" aria-label="圧縮設定とプレビュー" hidden>
+        <p id="file-name" class="file-name"></p>
+        <div class="settings">
+          <fieldset>
+            <legend>形式と圧縮</legend>
+            <label for="format">保存形式</label>
+            <select id="format">
+              <option value="original">元の形式</option>
+              <option value="jpeg">JPEG</option>
+              <option value="png">PNG</option>
+              <option value="webp">WebP</option>
+              <option value="avif">AVIF</option>
+            </select>
+            <div id="webp-settings" class="setting" hidden>
+              <label for="webp-mode">圧縮方式</label>
+              <select id="webp-mode">
+                <option value="lossy">非可逆（画質を調整）</option>
+                <option value="lossless">可逆（画素を保持）</option>
+              </select>
+            </div>
+            <div id="quality-settings" class="setting">
+              <div class="label-line">
+                <label for="quality">画質</label>
+                <output id="quality-value" for="quality">80 / 100</output>
+              </div>
+              <input id="quality" type="range" min="1" max="100" value="80">
+            </div>
+            <div id="png-settings" class="setting" hidden>
+              <label for="png-level">圧縮レベル</label>
+              <select id="png-level">
+                <option value="1">速度優先</option>
+                <option value="2" selected>標準</option>
+                <option value="4">容量優先</option>
+              </select>
+            </div>
+            <p id="format-note" class="muted setting-note"></p>
+          </fieldset>
+          <fieldset>
+            <legend>ピクセル数</legend>
+            <label for="resize">縮小方法</label>
+            <select id="resize">
+              <option value="keep">元の大きさ</option>
+              <option value="percent">割合で縮小</option>
+              <option value="edge">長辺を指定</option>
+            </select>
+            <div id="percent-settings" class="setting" hidden>
+              <div class="label-line">
+                <label for="percent">元の幅・高さに対する割合</label>
+                <output id="percent-value" for="percent">75%</output>
+              </div>
+              <input id="percent" type="range" min="1" max="100" value="75">
+            </div>
+            <div id="edge-settings" class="setting" hidden>
+              <label for="edge">長辺の上限（px）</label>
+              <input id="edge" type="number" min="1" step="1" value="1600" inputmode="numeric" required>
+            </div>
+            <p id="resize-note" class="muted setting-note"></p>
+          </fieldset>
+        </div>
+        <div class="previews" aria-label="画像の比較">
+          <figure>
+            <figcaption><strong>元の画像</strong><span id="original-info" class="muted"></span></figcaption>
+            <div class="preview"><img id="original-image" alt="元の画像"></div>
+          </figure>
+          <figure>
+            <figcaption><strong>圧縮後</strong><span id="compressed-info" class="muted"></span></figcaption>
+            <div class="preview">
+              <img id="compressed-image" alt="圧縮後の画像" hidden>
+              <p id="preview-state" class="preview-state muted">圧縮結果を準備しています…</p>
+            </div>
+          </figure>
+        </div>
+        <div class="export">
+          <dl class="sizes">
+            <div><dt>元のサイズ</dt><dd id="original-bytes">—</dd></div>
+            <div><dt>予想保存サイズ</dt><dd id="estimated-bytes">—</dd></div>
+            <div><dt>サイズの変化</dt><dd id="size-change">—</dd></div>
+          </dl>
+          <button id="save" class="primary" type="button" disabled>圧縮した画像を保存</button>
+        </div>
+      </section>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+    </section>
+    <footer class="muted">画像はブラウザ内で処理されます。</footer>
+  </main>
+</body>
+</html>

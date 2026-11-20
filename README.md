@@ -45,6 +45,16 @@ npm run dev
 
 画像の読み込み、並べ替え、PDFへの変換はブラウザ内で行います。`npm run build` で配布ファイルを `src/img2pdf/dist/` に作ります。
 
+## 画像圧縮ツール
+
+```sh
+cd src/image-compressor
+npm ci
+npm run dev
+```
+
+JPEG・PNG・WebP・AVIF の静止画をブラウザ内で圧縮します。形式に合わせて圧縮方法を選び、幅と高さの割合または長辺の上限を指定できます。表示する保存サイズは、圧縮したファイルの実際のバイト数です。`npm run build` で配布ファイルを `src/image-compressor/dist/` に作ります。
+
 ## アプリの追加と公開
 
 アプリごとに `src/<アプリ名>/` を作り、独立した `package.json` を置きます。手元で変更したアプリの `npm run build` を実行し、ソースと `dist/` を一緒にコミットします。追加時は `site/index.html` にリンクを足します。
