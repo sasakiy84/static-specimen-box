@@ -55,6 +55,22 @@ npm run dev
 
 JPEG・PNG・WebP・AVIF の静止画をブラウザ内で圧縮します。形式に合わせて圧縮方法を選び、幅と高さの割合または長辺の上限を指定できます。圧縮後のファイルサイズは KB や MB などの単位で表示します。プレビューを選ぶと、元の画像と圧縮後の画像をそれぞれ全画面で確認できます。`npm run build` で配布ファイルを `src/image-compressor/dist/` に作ります。
 
+## 文献ライブラリ
+
+```sh
+cd src/bibliography-control
+npm ci
+npm run dev
+```
+
+現行の26列 CSV を読み込み、キーワードやタグ式で検索できます。新規の Bib は同じ画面の Bib Formatter で作成します。既存 Bib と Markdown ノートは Drive 上の原本を編集でき、PDF などの原文も登録できます。原本の変更後に「一覧・CSV を更新」で一覧に反映します。
+
+Google Drive 接続の対象は `https://static-specimen-box.sasakiy84.net` です。OAuth の「テストユーザー」に登録した Google アカウントで接続し、直下に `Bibs/`、`Originals/`、`Notes/`、`Scripts/` があるルートを選びます。新規 CSV は `Scripts/_entries.csv` に作成します。既存の CSV は同じファイル ID で更新します。書き込み直前に変更を確認するため、初版の編集・採番は一つのルートを一人ずつ操作する運用を想定しています。
+
+「サンプルを見る」では、一時データで編集や登録を試せます。サンプルで保存した内容は、サンプルを開いている間だけ保持されます。添付の実データは配布に含めません。型検査と配布ファイルの生成は `npm run build`、回帰テストは `npm test`（Node.js と Bun）が担当します。
+
+参考文献の出典とライセンスは [THIRD_PARTY.md](src/bibliography-control/public/THIRD_PARTY.md) にあります。Bib 変換と PDF メタデータの処理は [Bib Formatter](https://github.com/sasakiy84/bib-formatter/tree/954072af0237d122dfcc44e929626c20d6943038) のソースを統合しています。
+
 ## アプリの追加と公開
 
 アプリごとに `src/<アプリ名>/` を作り、独立した `package.json` を置きます。手元で変更したアプリの `npm run build` を実行し、ソースと `dist/` を一緒にコミットします。追加時は `site/index.html` にリンクを足します。

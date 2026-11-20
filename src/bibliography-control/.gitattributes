@@ -1,0 +1,4 @@
+public/citation-vendor.js -whitespace
+dist/citation-vendor.js -whitespace
+dist/assets/*.js -whitespace
+dist/THIRD-PARTY-NOTICES.md -whitespace

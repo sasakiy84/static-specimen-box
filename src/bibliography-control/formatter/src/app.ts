@@ -1,0 +1,389 @@
+import { fieldLabel } from './field-actions';
+import { addCommonField, getSingleEntryFieldActions, removeEntryField, changeEntryType, convertBib, makeFilename, type Conversion } from './formatter';
+import { exampleBib } from './examples';
+import { detectBibLanguage } from './language';
+import { addEntryTag, entryTags, tagCandidates } from './tags';
+import { discardDraft, readDraft, writeDraft, type Draft } from './draft';
+
+interface FormatterOptions {
+  prefix: string;
+  tags: string[];
+  draftKey: string;
+  onSave(bib: string, filename: string, pdf: File | undefined): Promise<void>;
+}
+
+export function mountFormatter(root: HTMLElement, options: FormatterOptions): { setPrefix(prefix: string): void } {
+  const query = new URLSearchParams(options.tags.slice(0, 100).map(tag => ['tags', tag.slice(0, 200)]));
+  let filenamePrefix = options.prefix;
+  let importedPdf: File | undefined;
+  let saving = false;
+
+  function element<T extends HTMLElement>(id: string, kind: { new(): T }): T {
+    const found = root.querySelector(`#${CSS.escape(id)}`);
+    if (!(found instanceof kind)) throw new Error(`Missing element: ${id}`);
+    return found;
+  }
+  const source = element('source', HTMLTextAreaElement);
+  const output = element('output', HTMLTextAreaElement);
+  const status = element('status', HTMLParagraphElement);
+  const warnings = element('warnings', HTMLUListElement);
+  const filenames = element('filenames', HTMLDivElement);
+  const copy = element('copy', HTMLButtonElement);
+  const download = element('download', HTMLButtonElement);
+  const driveSave = element('drive-save', HTMLButtonElement);
+  const attachPdf = element('drive-attach', HTMLInputElement);
+  const attachLabel = element('drive-attach-label', HTMLLabelElement);
+  const copyNames = element('copy-names', HTMLButtonElement);
+  const fieldTools = element('field-tools', HTMLDivElement);
+  const entryTools = element('entry-tools', HTMLDivElement);
+  const fieldButtons = element('field-buttons', HTMLDivElement);
+  const candidateRegion = element('tag-candidates', HTMLFieldSetElement);
+  const candidateContainer = element('tag-candidate-buttons', HTMLDivElement);
+  const candidateReason = element('tag-candidate-reason', HTMLParagraphElement);
+  const candidates = tagCandidates(query);
+  candidateRegion.hidden = candidates.length === 0;
+  candidateReason.hidden = !candidates.some(tag => tag.includes(','));
+  const candidateButtons = candidates.map(tag => {
+    const button = document.createElement('button'); button.type = 'button'; button.textContent = tag;
+    if (tag.includes(',')) button.setAttribute('aria-describedby', 'tag-candidate-reason');
+    button.addEventListener('click', () => {
+      if (button.disabled || button.getAttribute('aria-pressed') === 'true') return;
+      try {
+        const updated = addEntryTag(output.value, tag);
+        inputRevision++;
+        displayResult(updated);
+      } catch (error) { status.textContent = error instanceof Error ? error.message : String(error); }
+    });
+    candidateContainer.append(button);
+    return { tag, button };
+  });
+  let inputLanguage: Draft['language'] = 'japanese';
+  let detectLanguageOnConvert = true;
+  let lastConvertedSource = '';
+  const languageButtons = ['japanese', 'english', 'other'].map(value => ({ value, button: element(`language-${value}`, HTMLButtonElement) }));
+  const otherLanguage = element('other-language', HTMLInputElement);
+  const otherLanguageLabel = element('other-language-label', HTMLLabelElement);
+  const tabs = [element('converter-tab', HTMLButtonElement), element('prompt-tab', HTMLButtonElement)];
+  const panels = [element('converter-panel', HTMLDivElement), element('prompt-panel', HTMLDivElement)];
+  function selectTab(index: number): void {
+    tabs.forEach((tab, tabIndex) => {
+      const selected = tabIndex === index;
+      tab.setAttribute('aria-selected', String(selected));
+      tab.tabIndex = selected ? 0 : -1;
+      panels[tabIndex]!.hidden = !selected;
+    });
+  }
+  tabs.forEach((tab, index) => {
+    tab.addEventListener('click', () => selectTab(index));
+    tab.addEventListener('keydown', event => {
+      let nextIndex: number;
+      if (event.key === 'ArrowRight') nextIndex = (index + 1) % tabs.length;
+      else if (event.key === 'ArrowLeft') nextIndex = (index + tabs.length - 1) % tabs.length;
+      else if (event.key === 'Home') nextIndex = 0;
+      else if (event.key === 'End') nextIndex = tabs.length - 1;
+      else return;
+      event.preventDefault();
+      selectTab(nextIndex);
+      tabs[nextIndex]!.focus();
+    });
+  });
+  const llmPrompt = element('llm-prompt', HTMLTextAreaElement);
+  const promptStatus = element('prompt-status', HTMLParagraphElement);
+  element('copy-prompt', HTMLButtonElement).addEventListener('click', () => void copyText(llmPrompt.value, llmPrompt, promptStatus));
+  function selectedLanguage(): string {
+    return inputLanguage === 'other' ? otherLanguage.value.trim() : inputLanguage;
+  }
+  function selectLanguage(value: string): void {
+    inputLanguage = value === 'japanese' || value === 'english' ? value : 'other';
+    if (inputLanguage === 'other' && value !== 'other') otherLanguage.value = value;
+    languageButtons.forEach(choice => choice.button.setAttribute('aria-pressed', String(choice.value === inputLanguage)));
+    otherLanguageLabel.hidden = inputLanguage !== 'other';
+  }
+  function languageChanged(): void {
+    detectLanguageOnConvert = false;
+    const input = source.value === lastConvertedSource && output.value.trim() ? output.value : source.value || output.value;
+    if (input.trim()) convertSource(input);
+    else sourceChanged();
+  }
+  languageButtons.forEach(({ value, button }) => {
+    button.addEventListener('click', () => {
+      if (inputLanguage === value) return;
+      selectLanguage(value);
+      languageChanged();
+    });
+  });
+  otherLanguage.addEventListener('input', languageChanged);
+
+  let result: Conversion | undefined;
+  let inputRevision = 0;
+
+  function saveCurrentDraft(): void {
+    writeDraft(options.draftKey, { version: 1, source: source.value, output: output.value, language: inputLanguage,
+      otherLanguage: otherLanguage.value, initialBibtex: null, detectLanguageOnConvert, lastConvertedSource });
+  }
+  function updateTagCandidates(): void {
+    const entry = result?.entries.length === 1 ? result.entries[0] : undefined;
+    const selected = entryTags(entry?.fields._tags ?? '');
+    for (const { tag, button } of candidateButtons) {
+      const added = selected.includes(tag);
+      button.disabled = !entry || tag.includes(',');
+      button.setAttribute('aria-pressed', String(added));
+      button.setAttribute('aria-disabled', String(button.disabled || added));
+      button.textContent = added ? `${tag}（追加済み）` : tag;
+    }
+  }
+  function invalidate(preserveOutput = false): void {
+    inputRevision++;
+    result = undefined;
+    if (!preserveOutput) output.value = '';
+    fieldTools.hidden = true;
+    fieldButtons.replaceChildren();
+    entryTools.replaceChildren();
+    filenames.replaceChildren();
+    warnings.replaceChildren();
+    copy.disabled = download.disabled = copyNames.disabled = driveSave.disabled = true;
+    status.textContent = '';
+    updateTagCandidates();
+  }
+  async function copyText(text: string, fallback: HTMLTextAreaElement | HTMLInputElement, feedback: HTMLElement = status): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(text);
+      feedback.textContent = '';
+    } catch {
+      fallback.focus(); fallback.select();
+      feedback.textContent = 'コピーする内容を選択しました。Ctrl+C / ⌘C でコピーしてください。';
+    }
+  }
+  function sourceChanged(): void {
+    inputRevision++;
+    if (!output.value.trim()) invalidate(true);
+    else status.textContent = '';
+    saveCurrentDraft();
+  }
+  source.addEventListener('input', event => {
+    importedPdf = undefined; attachLabel.hidden = true;
+    detectLanguageOnConvert = true;
+    sourceChanged();
+    if (event instanceof InputEvent && event.inputType === 'insertFromPaste') convertSource();
+  });
+  function previewOutput(): void {
+    const text = output.value;
+    invalidate(true);
+    if (!text.trim()) return;
+    try {
+      const updated = convertBib(text, { generateKeys: false });
+      displayResult({ ...updated, bib: text }, false);
+
+    } catch (error) { status.textContent = `編集中: ${error instanceof Error ? error.message : String(error)}`; }
+  }
+  output.addEventListener('input', () => { previewOutput(); saveCurrentDraft(); });
+  element('example', HTMLButtonElement).addEventListener('click', () => { source.value = exampleBib; detectLanguageOnConvert = true; sourceChanged(); source.focus(); source.setSelectionRange(0, 0); source.scrollTop = 0; });
+  element('clear', HTMLButtonElement).addEventListener('click', () => {
+    source.value = ''; otherLanguage.value = ''; selectLanguage('japanese');
+    detectLanguageOnConvert = true; lastConvertedSource = ''; importedPdf = undefined; attachLabel.hidden = true;
+    invalidate(); discardDraft(options.draftKey);
+    source.focus();
+  });
+  function displayResult(conversion: Conversion, writeOutput = true): void {
+    result = filenamePrefix ? {
+      ...conversion,
+      entries: conversion.entries.map(entry => ({ ...entry, filename: makeFilename(entry.fields, filenamePrefix) })),
+      warnings: [...conversion.warnings],
+    } : conversion;
+    if (filenamePrefix) {
+      const seen = new Set<string>();
+      for (const entry of result.entries) {
+        const warning = `${entry.key}: ファイル名が重複しています。保存時に区別してください。`;
+        if (seen.has(entry.filename) && !result.warnings.includes(warning)) result.warnings.push(warning);
+        seen.add(entry.filename);
+      }
+    }
+    if (writeOutput) output.value = result.bib;
+    filenames.replaceChildren();
+    warnings.replaceChildren();
+    fieldButtons.replaceChildren();
+    entryTools.replaceChildren();
+    fieldTools.hidden = result.entries.length !== 1;
+    const singleEntry = result.entries.length === 1 ? result.entries[0] : undefined;
+    if (singleEntry) {
+      const actions = getSingleEntryFieldActions(result.bib);
+      for (const [heading, groups, removing] of [
+        ['必須', actions.required, false],
+        ['任意', actions.optional.map(field => [field]), false],
+        ['削除', actions.remove.map(field => [field]), true],
+      ] as const) {
+        if (!groups.length) continue;
+        const section = document.createElement('fieldset'); section.className = 'field-group';
+        const legend = document.createElement('legend'); legend.textContent = heading; section.append(legend);
+        for (const fields of groups) {
+          const row = document.createElement('div'); row.className = 'field-options';
+          if (fields.length > 1) {
+            const alternative = document.createElement('span'); alternative.textContent = `${fields.map(fieldLabel).join('／')}のいずれか`;
+            row.append(alternative);
+          }
+          for (const field of fields) {
+            const label = fieldLabel(field);
+            const button = document.createElement('button'); button.type = 'button';
+            button.textContent = `${label}を${removing ? '削除' : '追加'}`; button.title = field;
+            button.addEventListener('click', () => {
+              if (!result) return;
+              try {
+                const updated = removing ? removeEntryField(result.bib, field) : addCommonField(result.bib, field);
+                const caret = removing ? output.selectionStart : updated.bib.indexOf(`  ${field} = {`) + `  ${field} = {`.length;
+                invalidate(); displayResult(updated);
+                output.focus(); output.setSelectionRange(caret, caret);
+              } catch (error) { status.textContent = error instanceof Error ? error.message : String(error); }
+            });
+            row.append(button);
+          }
+          section.append(row);
+        }
+        fieldButtons.append(section);
+      }
+    }
+
+    status.textContent = '';
+    const messages = result.warnings;
+    for (const message of messages) { const li = document.createElement('li'); li.textContent = message; warnings.append(li); }
+    for (const [entryIndex, entry] of result.entries.entries()) {
+      const displayKey = entry.key || (result.entries.length === 1 ? 'キーなし' : `キーなし（文献${entryIndex + 1}）`);
+      const controls = document.createElement('div'); controls.className = 'toolbar';
+      const typeLabel = document.createElement('label'); typeLabel.textContent = result.entries.length === 1 ? '文献種別 ' : `${displayKey} の文献種別 `;
+      const typeSelect = document.createElement('select'); typeSelect.setAttribute('aria-label', `${displayKey} の文献種別`); typeSelect.dataset.entryIndex = String(entryIndex);
+      const choices: [string, string][] = [['article', '雑誌論文'], ['inproceedings', '会議論文'], ['book', '書籍'], ['incollection', '書籍の章'], ['phdthesis', '博士論文'], ['mathesis', '修士論文'], ['thesis', 'その他の学位論文'], ['report', '報告書'], ['online', 'Webページ'], ['unpublished', '未刊行資料'], ['misc', 'その他・未分類']];
+      const selected = entry.type === 'thesis' && ['phdthesis', 'mathesis'].includes(entry.fields.type ?? '') ? entry.fields.type! : entry.type;
+      if (!choices.some(([type]) => type === selected)) choices.push([selected, `その他の種別（${selected}）`]);
+      for (const [value, text] of choices) { const option = document.createElement('option'); option.value = value; option.textContent = text; typeSelect.append(option); }
+      typeSelect.value = selected;
+      typeLabel.append(typeSelect);
+      const changeType = document.createElement('button'); changeType.textContent = '種別を変更'; changeType.setAttribute('aria-label', `${displayKey} の種別を変更`);
+      changeType.addEventListener('click', () => {
+        if (!result) return;
+        try {
+          const updated = changeEntryType(result.bib, entry.key, typeSelect.value, entryIndex);
+          updated.warnings = [...new Set([...result.warnings, ...updated.warnings])];
+          for (const [index, changed] of updated.entries.entries()) changed.removed = result.entries[index]?.removed ?? [];
+          source.value = updated.bib;
+          invalidate(); displayResult(updated);
+
+          const nextSelect = [...root.querySelectorAll<HTMLSelectElement>('select')].find(select => select.dataset.entryIndex === String(entryIndex));
+          nextSelect?.focus();
+        } catch (error) { status.textContent = error instanceof Error ? error.message : String(error); }
+      });
+      controls.append(typeLabel, changeType);
+      const row = document.createElement('div'); row.className = 'filename-row';
+      entryTools.append(controls);
+      const label = document.createElement('label'); label.textContent = displayKey;
+      const input = document.createElement('input'); input.readOnly = true; input.value = entry.filename;
+      input.id = `filename-${filenames.children.length}`; label.htmlFor = input.id;
+      input.addEventListener('click', () => input.select());
+      const button = document.createElement('button'); button.textContent = 'コピー'; button.type = 'button'; button.setAttribute('aria-label', `${displayKey} のファイル名をコピー`);
+      button.addEventListener('click', () => void copyText(entry.filename, input));
+      row.append(input, button);
+      const group = document.createElement('div'); group.className = 'filename-entry'; group.append(label, row); filenames.append(group);
+    }
+    copy.disabled = download.disabled = copyNames.disabled = false;
+    driveSave.disabled = saving || result.entries.length !== 1;
+    updateTagCandidates();
+    saveCurrentDraft();
+  }
+  element('file', HTMLInputElement).addEventListener('change', async event => {
+    if (!(event.currentTarget instanceof HTMLInputElement)) return;
+    const fileInput = event.currentTarget;
+    const file = fileInput.files?.[0];
+    if (!file) return;
+    fileInput.value = '';
+    importedPdf = undefined; attachLabel.hidden = true;
+    invalidate();
+    const revision = inputRevision;
+    const isPdf = /\.pdf$/i.test(file.name) || file.type === 'application/pdf';
+    try {
+      if (isPdf) {
+        const { convertPdf } = await import('./pdf');
+        const conversion = await convertPdf(new Uint8Array(await file.arrayBuffer()));
+        if (revision !== inputRevision) return;
+        importedPdf = file; attachLabel.hidden = false; attachPdf.checked = true;
+        source.value = conversion.bib;
+        detectLanguageOnConvert = true;
+        convertSource(source.value, conversion.warnings);
+      } else {
+        const text = await file.text();
+        if (revision !== inputRevision) return;
+        source.value = text;
+        detectLanguageOnConvert = true;
+        convertSource();
+      }
+    } catch (error) {
+      if (revision === inputRevision) {
+        status.textContent = `読み込めませんでした: ${error instanceof Error ? error.message : String(error)}`;
+        saveCurrentDraft();
+      }
+    }
+  });
+  function convertSource(input: string = source.value, importWarnings: string[] = []): void {
+    invalidate(input === output.value);
+    try {
+      if (detectLanguageOnConvert) {
+        const detected = detectBibLanguage(input);
+        if (detected !== undefined) selectLanguage(detected);
+        detectLanguageOnConvert = false;
+      }
+      const now = new Date();
+      const downloadDate = [String(now.getFullYear()).padStart(4, '0'), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-');
+      const conversion = convertBib(input, { language: selectedLanguage(), downloadDate });
+      conversion.warnings = [...new Set([...conversion.warnings, ...importWarnings])];
+      lastConvertedSource = source.value;
+      displayResult(conversion);
+    }
+    catch (error) { status.textContent = `変換できませんでした: ${error instanceof Error ? error.message : String(error)}`; }
+    saveCurrentDraft();
+  }
+  element('convert', HTMLButtonElement).addEventListener('click', () => convertSource());
+  source.addEventListener('keydown', event => {
+    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') element('convert', HTMLButtonElement).click();
+  });
+  copy.addEventListener('click', () => { if (result) void copyText(result.bib, output); });
+  copyNames.addEventListener('click', async () => {
+    if (!result) return;
+    const text = result.entries.map(entry => entry.filename).join('\n');
+    try { await navigator.clipboard.writeText(text); status.textContent = ''; }
+    catch { status.textContent = 'クリップボードを利用できません。各ファイル名を選択してコピーしてください。'; }
+  });
+  download.addEventListener('click', () => {
+    if (!result) return;
+    const url = URL.createObjectURL(new Blob([result.bib], { type: 'application/x-bibtex;charset=utf-8' }));
+    const filename = result.entries[0]?.filename || 'references';
+    const link = document.createElement('a'); link.href = url; link.download = `${filename}.bib`; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+
+  driveSave.addEventListener('click', async () => {
+    const entry = result?.entries[0];
+    if (!entry || !result || result.entries.length !== 1 || saving) return;
+    saving = true;
+    driveSave.disabled = true;
+    try {
+      await options.onSave(result.bib, entry.filename + '.bib', attachPdf.checked ? importedPdf : undefined);
+    } finally {
+      saving = false;
+      driveSave.disabled = result?.entries.length !== 1;
+    }
+  });
+
+  const draft = readDraft(options.draftKey);
+  if (draft) {
+    source.value = draft.source; output.value = draft.output;
+    otherLanguage.value = draft.otherLanguage; selectLanguage(draft.language);
+    detectLanguageOnConvert = draft.detectLanguageOnConvert;
+    lastConvertedSource = draft.lastConvertedSource;
+    previewOutput();
+  }
+  updateTagCandidates();
+
+  return {
+    setPrefix(prefix: string): void {
+      filenamePrefix = prefix;
+      previewOutput();
+    },
+  };
+}

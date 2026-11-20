@@ -1,0 +1,53 @@
+.formatter-app h2 { font-size: 1.1rem; margin: 0; }
+.formatter-app header { margin-bottom: 2rem; }
+.formatter-app header p { margin-top: 0; }
+.formatter-app .tabs { display: flex; gap: .5rem; border-bottom: 1px solid GrayText; }
+.formatter-app .tabs button { border: 0; border-bottom: 3px solid transparent; background: transparent; color: inherit; }
+.formatter-app .tabs button[aria-selected=true] { border-bottom-color: currentColor; font-weight: bold; }
+.formatter-app #llm-prompt { min-height: 32rem; }
+.formatter-app #prompt-panel .result-head { flex-wrap: wrap; margin-bottom: .8rem; }
+.formatter-app #prompt-status:empty { display: none; }
+.formatter-app .toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: .6rem; margin-block: .8rem; }
+.formatter-app button, .formatter-app input, .formatter-app select { font: inherit; }
+.formatter-app select { max-width: 100%; padding: .4rem; }
+.formatter-app .language-buttons { display: inline-flex; gap: .4rem; }
+.formatter-app .language-buttons button, .formatter-app #other-language { box-sizing: border-box; height: 2.75rem; }
+.formatter-app .language-buttons button[aria-pressed=true] { font-weight: bold; outline: 2px solid currentColor; outline-offset: -3px; }
+.formatter-app .filename-entry { padding-block: .5rem; }
+.formatter-app .filename-entry > label { display: block; font-size: .85rem; overflow-wrap: anywhere; }
+.formatter-app #entry-tools .toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
+.formatter-app #entry-tools label { display: grid; grid-template-columns: minmax(0, 1fr) 10rem; align-items: center; gap: .5rem; }
+.formatter-app #entry-tools select { width: 100%; min-width: 0; }
+.formatter-app #entry-tools select, .formatter-app #entry-tools button { box-sizing: border-box; height: 2.75rem; margin: 0; }
+.formatter-app #entry-tools button { white-space: nowrap; }
+.formatter-app .field-group { min-width: 0; margin: .8rem 0; padding: .6rem; }
+.formatter-app .field-options { display: inline-flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin: .2rem .4rem .2rem 0; }
+.formatter-app .field-options button { font-size: .85rem; padding: .3rem .55rem; }
+.formatter-app #tag-candidate-buttons { display: flex; flex-wrap: wrap; gap: .4rem; }
+.formatter-app #tag-candidate-buttons button { min-width: 0; max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; }
+.formatter-app #tag-candidate-buttons button[aria-pressed=true] { font-weight: bold; outline: 2px solid currentColor; outline-offset: -3px; }
+.formatter-app #tag-candidate-buttons button:focus-visible { outline: 2px solid Highlight; outline-offset: 2px; }
+.formatter-app #tag-candidate-reason { margin-bottom: 0; font-size: .85rem; overflow-wrap: anywhere; }
+.formatter-app button { padding: .4rem .85rem; cursor: pointer; }
+.formatter-app button:disabled { cursor: default; }
+.formatter-app input[type=file] { max-width: 100%; }
+.formatter-app .panes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 1.5rem; }
+.formatter-app .pane { min-width: 0; display: grid; grid-template-rows: subgrid; grid-row: span 4; }
+.formatter-app .pane-actions, .formatter-app .pane > .toolbar { align-self: start; }
+.formatter-app textarea { display: block; box-sizing: border-box; width: 100%; min-height: 25rem; padding: .85rem; resize: vertical; font: .9rem/1.6 ui-monospace, monospace; tab-size: 2; }
+.formatter-app #filename-section { margin-bottom: 2rem; }
+.formatter-app .result-head { display: flex; align-items: baseline; gap: 1rem; }
+.formatter-app #status:empty { display: none; }
+.formatter-app #warnings { padding: 1rem 1rem 1rem 2.5rem; border: 1px solid GrayText; }
+.formatter-app #warnings:empty { display: none; }
+.formatter-app .filename-row { display: flex; gap: .6rem; align-items: stretch; margin-block: .3rem .7rem; }
+.formatter-app .filename-row input { flex: 1; min-width: 0; padding: .4rem .55rem; font-family: ui-monospace, monospace; }
+.formatter-app .filename-row input, .formatter-app .filename-row button { box-sizing: border-box; height: 2.75rem; margin: 0; }
+.formatter-app details { margin-top: 1.5rem; }
+.formatter-app summary { cursor: pointer; }
+@media (max-width: 700px) {
+.formatter-app .panes { grid-template-columns: 1fr; gap: 1.5rem; }
+.formatter-app .pane { display: block; grid-row: auto; }
+.formatter-app #entry-tools label { grid-template-columns: 1fr; }
+.formatter-app textarea { min-height: 18rem; }
+}
