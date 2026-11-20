@@ -32,6 +32,7 @@ const editDialog = byId('edit-dialog');
 const formatterPage = byId('formatter-page');
 const formatterRoot = byId('formatter-root');
 const routeLinks = [...document.querySelectorAll('a[data-route]')];
+const libraryTitle = document.querySelector('[data-page="library"] [data-page-heading]').textContent;
 const editSource = byId('edit-source');
 const tagEditor = byId('bib-tag-editor');
 const tagEntry = byId('bib-tag-input');
@@ -384,7 +385,7 @@ async function renderPage(focus = false) {
   }
   syncLibraryRoute();
   const heading = document.querySelector(`[data-page="${route.page}"] [data-page-heading]`);
-  document.title = route.page === 'library' ? heading.textContent : `${heading.textContent} | 文献ライブラリ`;
+  document.title = route.page === 'library' ? libraryTitle : `${heading.textContent} | ${libraryTitle}`;
   if (focus) {
     heading.focus({ preventScroll: true });
     window.scrollTo(0, 0);

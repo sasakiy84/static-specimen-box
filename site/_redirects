@@ -1,0 +1,3 @@
+/bibliography-control /turris-altissima/ 301
+/bibliography-control/ /turris-altissima/ 301
+/bibliography-control/* /turris-altissima/:splat 301
