@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="画像をプレビューしながら並べ替え、ひとつのPDFにまとめます。">
+  <title>img2pdf</title>
+  <script type="module" crossorigin src="./assets/index-Ba5qXKuo.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-BSehGrj6.css">
+</head>
+<body>
+  <main>
+    <h1>img2pdf</h1>
+    <section class="card" aria-label="画像をPDFにまとめる">
+      <div class="dropzone" id="dropzone">
+        <p class="drop-title">画像をここにドロップ</p>
+        <label class="file-button">
+          画像を選択
+          <input id="files" type="file" multiple disabled accept="image/jpeg,image/png,image/webp,image/avif,.jpg,.jpeg,.png,.webp,.avif">
+        </label>
+        <p class="muted">JPEG・PNG・WebP・AVIF</p>
+      </div>
+      <p id="error" class="error" role="alert" hidden></p>
+      <section id="pages" class="pages" aria-labelledby="pages-title" hidden>
+        <div class="pages-header">
+          <div>
+            <h2 id="pages-title">ページ順</h2>
+            <p class="muted">ドラッグまたは上下ボタンで並べ替えられます。</p>
+          </div>
+          <span id="page-count" class="page-count"></span>
+        </div>
+        <ol id="image-list" aria-label="PDFのページ順"></ol>
+        <div class="export">
+          <span class="muted">A4用紙に1枚ずつ配置</span>
+          <button id="save" class="primary" type="button" disabled>PDFを保存</button>
+        </div>
+      </section>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+    </section>
+    <footer class="muted">画像はブラウザ内で処理されます。</footer>
+  </main>
+  <dialog id="preview-dialog" aria-labelledby="preview-title">
+    <div class="dialog-header">
+      <h2 id="preview-title"></h2>
+      <form method="dialog"><button type="submit">閉じる</button></form>
+    </div>
+    <img id="preview-image" alt="">
+  </dialog>
+  <template id="image-row">
+    <li class="image-row">
+      <span class="page-number"></span>
+      <button type="button" class="thumbnail" data-action="preview"><img alt="" draggable="false"></button>
+      <div class="file-info">
+        <strong class="file-name"></strong>
+        <span class="dimensions muted"></span>
+      </div>
+      <div class="row-actions">
+        <button type="button" data-action="up" title="上へ移動">↑</button>
+        <button type="button" data-action="down" title="下へ移動">↓</button>
+        <button type="button" data-action="remove">削除</button>
+      </div>
+    </li>
+  </template>
+</body>
+</html>

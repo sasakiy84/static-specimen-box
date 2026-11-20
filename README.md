@@ -35,6 +35,16 @@ npm run build
 
 `index.html`、`app.js`、`style.css` を `dist/` にコピーします。人物データの抽出には、ブラウザから Hugging Face の公開APIを使います。 [NVIDIA Nemotron Personas](https://huggingface.co/collections/nvidia/nemotron-personas)
 
+## img2pdf
+
+```sh
+cd src/img2pdf
+npm ci
+npm run dev
+```
+
+画像の読み込み、並べ替え、PDFへの変換はブラウザ内で行います。`npm run build` で配布ファイルを `src/img2pdf/dist/` に作ります。
+
 ## アプリの追加と公開
 
 アプリごとに `src/<アプリ名>/` を作り、独立した `package.json` を置きます。手元で変更したアプリの `npm run build` を実行し、ソースと `dist/` を一緒にコミットします。追加時は `site/index.html` にリンクを足します。

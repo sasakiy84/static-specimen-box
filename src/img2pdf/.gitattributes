@@ -1,0 +1,3 @@
+# PDF出力に使う文字列の空白を配布ファイルに含める。
+dist/assets/pdf-*.js -whitespace
+dist/THIRD-PARTY-NOTICES.md text eol=lf
