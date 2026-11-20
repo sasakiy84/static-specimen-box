@@ -341,11 +341,13 @@ function selectTab(index: number): void {
 
 start.addEventListener('click', () => void exportVideo({ kind: 'compress', format: selectedFormat(), settings: settings() }, direct.checked));
 cancel.addEventListener('click', () => void cancelOperation());
-fileInput.addEventListener('change', () => {
+function openSelectedFile(): void {
   const source = fileInput.files?.[0];
   fileInput.value = '';
   if (source && !busy) void openVideo(source);
-});
+}
+
+fileInput.addEventListener('change', openSelectedFile);
 for (const type of ['dragenter', 'dragover']) dropzone.addEventListener(type, event => {
   event.preventDefault();
   if (!busy) dropzone.classList.add('drag');
@@ -384,3 +386,4 @@ byId('reset-settings').addEventListener('click', () => {
 for (const id of ['disk-option', 'trim-disk-option']) byId(id).hidden = !supportsPicker(window);
 window.addEventListener('beforeunload', event => { if (busy) event.preventDefault(); });
 updateControls();
+openSelectedFile();
