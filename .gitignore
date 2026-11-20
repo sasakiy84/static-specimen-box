@@ -2,3 +2,4 @@ node_modules/
 .generated/
 _site/
 .playwright-cli/
+.wrangler/

@@ -1,0 +1,2 @@
+# AAC の生成物には WebAssembly のバイト列が含まれるため、Git で改行を変換しない。
+dist/assets/mediabunny-aac-encoder-*.js binary
