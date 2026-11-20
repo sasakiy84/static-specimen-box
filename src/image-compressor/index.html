@@ -83,20 +83,28 @@
         <div class="previews" aria-label="画像の比較">
           <figure>
             <figcaption><strong>元の画像</strong><span id="original-info" class="muted"></span></figcaption>
-            <div class="preview"><img id="original-image" alt="元の画像"></div>
+            <div class="preview">
+              <button id="original-preview" class="preview-trigger" type="button" aria-label="元の画像を拡大" aria-haspopup="dialog">
+                <img id="original-image" alt="">
+                <span class="preview-action" aria-hidden="true">拡大</span>
+              </button>
+            </div>
           </figure>
           <figure>
             <figcaption><strong>圧縮後</strong><span id="compressed-info" class="muted"></span></figcaption>
             <div class="preview">
-              <img id="compressed-image" alt="圧縮後の画像" hidden>
+              <button id="compressed-preview" class="preview-trigger" type="button" aria-label="圧縮後の画像を拡大" aria-haspopup="dialog" hidden>
+                <img id="compressed-image" alt="">
+                <span class="preview-action" aria-hidden="true">拡大</span>
+              </button>
               <p id="preview-state" class="preview-state muted">圧縮結果を準備しています…</p>
             </div>
           </figure>
         </div>
         <div class="export">
           <dl class="sizes">
-            <div><dt>元のサイズ</dt><dd id="original-bytes">—</dd></div>
-            <div><dt>予想保存サイズ</dt><dd id="estimated-bytes">—</dd></div>
+            <div><dt>元のサイズ</dt><dd id="original-size">—</dd></div>
+            <div><dt>予想保存サイズ</dt><dd id="estimated-size">—</dd></div>
             <div><dt>サイズの変化</dt><dd id="size-change">—</dd></div>
           </dl>
           <button id="save" class="primary" type="button" disabled>圧縮した画像を保存</button>
@@ -106,5 +114,12 @@
     </section>
     <footer class="muted">画像はブラウザ内で処理されます。</footer>
   </main>
+  <dialog id="image-viewer" class="image-viewer" aria-labelledby="viewer-title">
+    <div class="viewer-toolbar">
+      <h2 id="viewer-title"></h2>
+      <button id="close-viewer" type="button" autofocus>閉じる</button>
+    </div>
+    <img id="viewer-image" alt="">
+  </dialog>
 </body>
 </html>

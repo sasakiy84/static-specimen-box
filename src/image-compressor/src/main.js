@@ -15,13 +15,19 @@ const resize = byId('resize');
 const percent = byId('percent');
 const edge = byId('edge');
 const originalImage = byId('original-image');
+const originalPreview = byId('original-preview');
 const compressedImage = byId('compressed-image');
+const compressedPreview = byId('compressed-preview');
+const imageViewer = byId('image-viewer');
+const viewerTitle = byId('viewer-title');
+const viewerImage = byId('viewer-image');
 const previewState = byId('preview-state');
 const save = byId('save');
 
 const number = new Intl.NumberFormat('ja-JP');
 const percentage = new Intl.NumberFormat('ja-JP', { style: 'percent', maximumSignificantDigits: 3 });
-const bytes = (size) => `${number.format(size)} バイト`;
+const sizeNumber = new Intl.NumberFormat('ja-JP', { maximumSignificantDigits: 3 });
+const sizeUnits = ['B', 'KB', 'MB', 'GB', 'TB'];
 const dimensions = ({ width, height }) => `${number.format(width)} × ${number.format(height)} px`;
 const summary = (image) => `${formats[image.format].label} · ${dimensions(image)}`;
 
@@ -35,19 +41,40 @@ let pending;
 let timer;
 let dragDepth = 0;
 
+function fileSize(bytes) {
+  let unit = 0;
+  let size = bytes;
+  while (unit < sizeUnits.length - 1 && Number(size.toPrecision(3)) >= 1000) {
+    size /= 1000;
+    unit += 1;
+  }
+  return `${sizeNumber.format(size)} ${sizeUnits[unit]}`;
+}
+
+function openViewer(trigger, image, title) {
+  if (imageViewer.open || !image.naturalWidth) return;
+  viewerTitle.textContent = title;
+  viewerImage.src = image.src;
+  trigger.focus({ preventScroll: true });
+  imageViewer.showModal();
+}
+
 function showError(message = '') {
   error.textContent = message;
   error.hidden = !message;
 }
 
 function clearResult(message) {
-  if (result) URL.revokeObjectURL(result.url);
+  if (result) {
+    if (imageViewer.open && viewerImage.src === result.url) imageViewer.close();
+    URL.revokeObjectURL(result.url);
+  }
   result = undefined;
-  compressedImage.hidden = true;
+  compressedPreview.hidden = true;
   compressedImage.removeAttribute('src');
   previewState.textContent = message;
   previewState.hidden = false;
-  byId('estimated-bytes').textContent = '—';
+  byId('estimated-size').textContent = '—';
   byId('size-change').textContent = '—';
   save.disabled = true;
 }
@@ -58,9 +85,9 @@ function showResult({ buffer, settings }) {
   const url = URL.createObjectURL(blob);
   result = { blob, url, name: `${original.file.name.replace(/\.[^.]+$/, '') || 'image'}_compressed.${format.extension}` };
   compressedImage.src = url;
-  compressedImage.hidden = false;
+  compressedPreview.hidden = false;
   previewState.hidden = true;
-  byId('estimated-bytes').textContent = bytes(blob.size);
+  byId('estimated-size').textContent = fileSize(blob.size);
   const difference = blob.size - original.file.size;
   byId('size-change').textContent = difference === 0
     ? '変化なし'
@@ -133,7 +160,7 @@ function handleWorkerMessage(data, file) {
     originalImage.src = originalUrl;
     byId('file-name').textContent = file.name;
     byId('original-info').textContent = summary(original);
-    byId('original-bytes').textContent = bytes(file.size);
+    byId('original-size').textContent = fileSize(file.size);
     editor.hidden = false;
     scheduleEncode(0);
     return;
@@ -159,6 +186,7 @@ function handleWorkerMessage(data, file) {
 
 function openFile(file) {
   if (!file) return;
+  imageViewer.close();
   clearTimeout(timer);
   worker?.terminate();
   worker = undefined;
@@ -229,9 +257,16 @@ for (const input of [formatSelect, webpMode, quality, pngLevel, resize, percent,
 
 compressedImage.addEventListener('error', () => {
   if (!result) return;
-  compressedImage.hidden = true;
+  compressedPreview.hidden = true;
   previewState.textContent = 'このブラウザでは圧縮後の画像をプレビューできません。';
   previewState.hidden = false;
+});
+
+originalPreview.addEventListener('click', () => openViewer(originalPreview, originalImage, '元の画像'));
+compressedPreview.addEventListener('click', () => openViewer(compressedPreview, compressedImage, '圧縮後の画像'));
+byId('close-viewer').addEventListener('click', () => imageViewer.close());
+imageViewer.addEventListener('close', () => {
+  if (!imageViewer.open) viewerImage.removeAttribute('src');
 });
 
 save.addEventListener('click', () => {
