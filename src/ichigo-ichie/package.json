@@ -1,0 +1,8 @@
+{
+  "name": "ichigo-ichie",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "mkdir -p dist && cp index.html app.js style.css dist/"
+  }
+}

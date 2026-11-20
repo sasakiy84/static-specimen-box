@@ -26,6 +26,15 @@ npm run dev
 
 `npm run build` で型を検査し、配布ファイルを `src/video-compressor/dist/` に作ります。動画の圧縮とトリミングはブラウザ内の Web Worker で実行します。利用できる保存形式とコーデックはブラウザや端末によって異なります。ライブラリのライセンスとソースの参照先は [THIRD-PARTY-NOTICES.txt](src/video-compressor/public/THIRD-PARTY-NOTICES.txt) にあります。
 
+## 一期一会
+
+```sh
+cd src/ichigo-ichie
+npm run build
+```
+
+`index.html`、`app.js`、`style.css` を `dist/` にコピーします。人物データの抽出には、ブラウザから Hugging Face の公開APIを使います。 [NVIDIA Nemotron Personas](https://huggingface.co/collections/nvidia/nemotron-personas)
+
 ## アプリの追加と公開
 
 アプリごとに `src/<アプリ名>/` を作り、独立した `package.json` を置きます。手元で変更したアプリの `npm run build` を実行し、ソースと `dist/` を一緒にコミットします。追加時は `site/index.html` にリンクを足します。
