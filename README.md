@@ -71,16 +71,7 @@ Google Drive 接続の対象は `https://static-specimen-box.sasakiy84.net` で�
 
 参考文献の出典とライセンスは [THIRD_PARTY.md](src/bibliography-control/public/THIRD_PARTY.md) にあります。Bib 変換と PDF メタデータの処理は [Bib Formatter](https://github.com/sasakiy84/bib-formatter/tree/954072af0237d122dfcc44e929626c20d6943038) のソースを統合しています。
 
-### ブラウザの再起動後にも Drive に接続する
-
-Google Cloud で同じ OAuth クライアントの「承認済みのリダイレクト URI」に `https://static-specimen-box.sasakiy84.net/bibliography-control/auth/callback` を追加します。Cloudflare の Worker `static-specimen-box` で、**Settings → Variables and Secrets** に次を Secret として登録します。
-
-| 名前 | 値 |
-| --- | --- |
-| `BIBLIOGRAPHY_GOOGLE_CLIENT_SECRET` | 上記の OAuth クライアントのシークレット |
-| `BIBLIOGRAPHY_SESSION_KEY` | `openssl rand -hex 32` で生成した64桁の値 |
-
-登録後の初回接続で Google の認可を行うと、ブラウザの再起動後も同じアカウントと最後に選んだフォルダを復帰します。接続復帰用の情報は、暗号化した HttpOnly Cookie で保持します。Cloudflare Worker は Google OAuth のトークン交換と更新を担当し、Drive の文献データはブラウザから直接読み書きします。「外部・テスト」の Google Cloud プロジェクトでは Drive の認可は最大7日です。 [Google OAuth の有効期限](https://developers.google.com/identity/protocols/oauth2#expiration)
+Google Drive に接続すると、ブラウザにアクセストークンとその有効期限を保存します。同じブラウザで再読み込みしたり開き直したりすると、有効期限内は最後に選んだフォルダを開きます。トークンの期限は通常、発行から約1時間です。期限が切れたときは「Google Drive に接続」を押してください。
 
 ## アプリの追加と公開
 

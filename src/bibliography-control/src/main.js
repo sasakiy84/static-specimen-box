@@ -6,7 +6,7 @@ import { authorize, loadIdentity, pickFolder, revoke } from './google-auth.js';
 import { createDrive, DriveError, folderIdFromLink, getAccessToken } from './drive.js';
 import { createWorkspace } from './workspace.js';
 import { demoDrive } from './demo.js';
-import { forgetServerSession, loginUrl, readAuthStatus, readServerSession, renewableSession } from './persistent-auth.js';
+import { forgetDriveSession, loadDriveSession, saveDriveSession } from './drive-session.js';
 import { readRoute, pageUrl } from './routes.js';
 import { discardDraft } from '../formatter/src/draft.ts';
 
@@ -46,7 +46,6 @@ let formatterLoading;
 let promptLoading;
 let isBusy = false;
 let authReady = false;
-let persistentAuth = false;
 let dirty = false;
 
 function setText(id, message) {
@@ -117,6 +116,7 @@ async function action(operation, errorTarget = 'workspace-error') {
   } catch (error) {
     const expired = error instanceof DriveError && error.status === 401;
     if (expired) {
+      forgetDriveSession(connected?.session);
       connected = undefined;
       if (workspace) clearWorkspace();
     }
@@ -164,41 +164,39 @@ async function selectWorkspace(drive, id, userId, isDemo = false) {
   if (readRoute().page === 'new') prepareFormatter();
 }
 
-async function connectWith(session) {
+async function connectWith(session, remember = false) {
   const drive = createDrive(session);
   const user = await drive.who();
+  const sample = readRoute().sample;
+  if (!remember && (sample || loadDriveSession()?.token !== session.token)) return;
   const reset = Boolean(workspace) && workspace.userId !== user.permissionId;
   clearWorkspace({ reset });
   connected = { session, drive, user };
+  if (remember) saveDriveSession(session);
+  if (sample) navigate(pageUrl('library', false), true);
   setText('workspace-status', '文献管理フォルダを選択してください。');
   const previous = loadRememberedFolder(user.permissionId);
   if (previous) await selectWorkspace(drive, previous, user.permissionId);
 }
 
 async function restoreConnection() {
-  const result = await readServerSession();
-  persistentAuth = result.persistent;
-  if (result.unavailable) throw new Error('Google Drive に自動で再接続できませんでした。もう一度お試しください。');
-  if (result.expired) setText('workspace-status', 'Google Drive の接続期限が切れました。再接続してください。');
-  if (result.session && !readRoute().sample) await connectWith(renewableSession(result.session));
-  return result;
+  if (readRoute().sample || connected) return;
+  const session = loadDriveSession();
+  if (!session) return;
+  try {
+    await connectWith(session);
+  } catch (error) {
+    if (error instanceof DriveError && error.status === 401) forgetDriveSession(session);
+    throw error;
+  }
 }
 
 async function readyIdentity() {
+  await action(restoreConnection, readRoute().page === 'new' ? 'formatter-message' : 'workspace-error');
   try {
-    const { sample, page } = readRoute();
-    // サンプルを直接開いた場合も、接続設定だけは読み込んでおく。
-    const result = sample ? await readAuthStatus() : await restoreConnection();
-    persistentAuth = result.persistent;
-    if (!persistentAuth) await loadIdentity();
-    const url = new URL(location.href);
-    if (url.searchParams.has('auth')) {
-      url.searchParams.delete('auth');
-      history.replaceState(history.state, '', url);
-      setText(page === 'new' ? 'formatter-message' : 'workspace-error', 'Google Drive への接続を完了できませんでした。もう一度お試しください。');
-    }
+    await loadIdentity();
   } catch (error) {
-    setText(readRoute().page === 'new' ? 'formatter-message' : 'workspace-error', error.message);
+    if (!connected) setText('workspace-error', error.message);
   } finally {
     authReady = true;
     updateButtons();
@@ -206,15 +204,11 @@ async function readyIdentity() {
 }
 
 connect.addEventListener('click', () => action(async () => {
-  if (persistentAuth) {
-    location.assign(loginUrl(readRoute().page));
-    return;
-  }
   if (!globalThis.google?.accounts?.oauth2) await loadIdentity();
-  await connectWith(await authorize());
+  await connectWith(await authorize(), true);
 }));
 folderButton.addEventListener('click', () => action(async () => {
-  const id = await pickFolder(await getAccessToken(connected.session));
+  const id = await pickFolder(getAccessToken(connected.session));
   if (id) await selectWorkspace(connected.drive, id, connected.user.permissionId);
 }));
 folderForm.addEventListener('submit', event => {
@@ -228,13 +222,15 @@ folderForm.addEventListener('submit', event => {
 });
 disconnect.addEventListener('click', () => action(async () => {
   const wasSample = workspace?.isDemo;
-  if (connected?.session.id) await forgetServerSession(connected.session.id);
-  else if (connected) revoke(connected.session.token);
+  if (connected) {
+    forgetDriveSession(connected.session);
+    revoke(connected.session.token);
+  }
   connected = undefined;
   clearWorkspace();
   if (wasSample) {
     navigate(pageUrl('library', false), true);
-    if (persistentAuth) await restoreConnection();
+    await restoreConnection();
   }
 }));
 
@@ -317,6 +313,7 @@ function prepareFormatter() {
   }).catch(error => {
     if (workspace !== context || formatterLoading !== request) return;
     if (error instanceof DriveError && error.status === 401) {
+      forgetDriveSession(connected?.session);
       connected = undefined;
       clearWorkspace();
     }
@@ -375,12 +372,11 @@ async function renderPage(focus = false) {
   if (route.page === 'prompt') preparePrompt();
   if (!route.sample && workspace?.isDemo) {
     clearWorkspace();
-    if (persistentAuth) await action(restoreConnection);
+    await action(restoreConnection);
   }
 
   if (route.sample && !workspace?.isDemo) {
     await action(async () => {
-      if (connected && !connected.session.id) revoke(connected.session.token);
       connected = undefined;
       await selectWorkspace(demoDrive(), 'demo-root', 'demo', true);
     }, route.page === 'new' ? 'formatter-message' : 'workspace-error');
