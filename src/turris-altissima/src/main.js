@@ -9,6 +9,7 @@ import { readBibAnnotations, writeBibAnnotations } from './catalog.js';
 import { browserCatalogCache } from './catalog-cache.js';
 import { demoDrive } from './demo.js';
 import { forgetDriveSession, loadDriveSession, saveDriveSession } from './drive-session.js';
+import { forgetServerSession, loginUrl, readServerSession, renewableSession } from './persistent-auth.js';
 import { readRoute, pageUrl } from './routes.js';
 import { discardDraft } from '../formatter/src/draft.ts';
 
@@ -55,6 +56,7 @@ let formatterLoading;
 let promptLoading;
 let isBusy = false;
 let authReady = !googleEnabled;
+let persistentAuth;
 let restoringSession = false;
 let dirty = false;
 
@@ -223,10 +225,11 @@ async function connectWith(session, remember = false) {
   const drive = createDrive(session);
   const user = await drive.who();
   const sample = readRoute().sample;
-  if (!remember && (sample || loadDriveSession()?.token !== session.token)) return;
+  if (!remember && (sample || (!session.id && loadDriveSession()?.token !== session.token))) return;
   const reset = Boolean(workspace) && workspace.userId !== user.permissionId;
   clearWorkspace({ reset });
   connected = { session, drive, user };
+  if (session.id) forgetDriveSession(loadDriveSession());
   if (remember) saveDriveSession(session);
   if (sample) navigate(pageUrl('library', false), true);
   const previous = loadRememberedFolder(user.permissionId);
@@ -235,36 +238,48 @@ async function connectWith(session, remember = false) {
 
 async function restoreConnection() {
   if (!googleEnabled || readRoute().sample || connected) return;
-  const session = loadDriveSession();
-  if (!session) return;
+  let legacySession;
   restoringSession = true;
   updateButtons();
   try {
-    await connectWith(session);
+    const result = await readServerSession();
+    persistentAuth = result.persistent;
+    if (result.session) await connectWith(renewableSession(result.session));
+    else if (!persistentAuth) {
+      legacySession = loadDriveSession();
+      if (legacySession) await connectWith(legacySession);
+      try { await loadIdentity(); }
+      catch (error) { if (!connected) throw error; }
+    }
   } catch (error) {
-    if (error instanceof DriveError && error.status === 401) forgetDriveSession(session);
+    if (error instanceof DriveError && error.status === 401) forgetDriveSession(legacySession);
     throw error;
   } finally {
     restoringSession = false;
+    authReady = true;
     updateButtons();
   }
 }
 
 async function readyIdentity() {
   await action(restoreConnection, connectionErrorTarget());
-  try {
-    await loadIdentity();
-  } catch (error) {
-    if (!connected) setText(connectionErrorTarget(), error.message);
-  } finally {
-    authReady = true;
-    updateButtons();
+  const url = new URL(location.href);
+  if (url.searchParams.get('auth') === 'failed') {
+    url.searchParams.delete('auth');
+    history.replaceState(history.state, '', url);
+    setText(connectionErrorTarget(), 'Google Drive に接続できませんでした。Google の認可を確認して、もう一度お試しください。');
   }
 }
 
 for (const button of [connect, settingsConnect]) {
   button.addEventListener('click', async () => {
     await action(async () => {
+      if (persistentAuth === undefined) await restoreConnection();
+      if (connected) return;
+      if (persistentAuth) {
+        location.assign(loginUrl(readRoute().page));
+        return;
+      }
       if (!globalThis.google?.accounts?.oauth2) await loadIdentity();
       await connectWith(await authorize(), true);
     }, connectionErrorTarget());
@@ -297,7 +312,7 @@ async function chooseWorkspace(getFolderId) {
 }
 
 folderButton.addEventListener('click', () => {
-  void chooseWorkspace(() => pickFolder(getAccessToken(connected.session)));
+  void chooseWorkspace(async () => pickFolder(await getAccessToken(connected.session)));
 });
 folderForm.addEventListener('submit', event => {
   event.preventDefault();
@@ -307,8 +322,11 @@ disconnect.addEventListener('click', async () => {
   await action(async () => {
     const wasSample = workspace?.isDemo;
     if (connected) {
-      forgetDriveSession(connected.session);
-      revoke(connected.session.token);
+      if (connected.session.id) await forgetServerSession(connected.session.id);
+      else {
+        forgetDriveSession(connected.session);
+        revoke(connected.session.token);
+      }
     }
     connected = undefined;
     clearWorkspace();

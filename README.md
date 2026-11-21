@@ -71,7 +71,9 @@ Google Drive 接続の対象は `https://static-specimen-box.sasakiy84.net` で�
 
 参考文献の出典とライセンスは [THIRD_PARTY.md](src/turris-altissima/public/THIRD_PARTY.md) にあります。Bib 変換と PDF メタデータの処理は [Bib Formatter](https://github.com/sasakiy84/bib-formatter/tree/954072af0237d122dfcc44e929626c20d6943038) のソースを統合しています。
 
-Google Drive に接続すると、ブラウザにアクセストークンとその有効期限を保存します。同じブラウザで再読み込みしたり開き直したりすると、有効期限内は最後に選んだフォルダを開きます。トークンの期限は通常、発行から約1時間です。期限が切れたときは「Google Drive に接続」を押してください。
+Google Drive 接続を自動更新するには、OAuth ウェブクライアントの承認済みリダイレクト URI に `https://static-specimen-box.sasakiy84.net/turris-altissima/auth/callback` を登録します。同じクライアントのシークレットを Cloudflare の `static-specimen-box` Worker の Secret `BIBLIOGRAPHY_GOOGLE_CLIENT_SECRET` に設定します。
+
+設定後、サイトから一度 Google Drive への接続を許可すると、Worker が Durable Object に更新トークンを保存し、必要に応じてアクセストークンを更新します。ブラウザを閉じても同じブラウザで接続を復元します。アプリの接続期限は最長90日です。Google の OAuth 公開ステータスが「テスト」の場合、Drive の更新トークンは発行から7日で期限切れになります。Worker のシークレットが未設定の環境では、従来の短期接続を使います。
 
 ## アプリの追加と公開
 

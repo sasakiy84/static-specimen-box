@@ -30,7 +30,8 @@ export function folderIdFromLink(value) {
   throw new Error(message);
 }
 
-export function getAccessToken(session) {
+export async function getAccessToken(session) {
+  if (session.renew && session.expiresAt <= Date.now() + 30_000) await session.renew();
   if (Date.now() >= session.expiresAt) throw new DriveError(401, 'Google Drive の接続期限が切れました。再接続してください。');
   return session.token;
 }
@@ -38,8 +39,14 @@ export function getAccessToken(session) {
 export function createDrive(session, request = fetch) {
   async function send(url, options = {}) {
     const headers = new Headers(options.headers);
-    headers.set('Authorization', `Bearer ${getAccessToken(session)}`);
-    const response = await request(url, { ...options, headers, credentials: 'omit' });
+    const token = await getAccessToken(session);
+    headers.set('Authorization', `Bearer ${token}`);
+    let response = await request(url, { ...options, headers, credentials: 'omit' });
+    if (response.status === 401 && session.renew) {
+      if (session.token === token) await session.renew(true);
+      headers.set('Authorization', `Bearer ${await getAccessToken(session)}`);
+      response = await request(url, { ...options, headers, credentials: 'omit' });
+    }
     if (response.ok) return response;
     const message = {
       401: 'Google Drive の接続期限が切れました。再接続してください。',

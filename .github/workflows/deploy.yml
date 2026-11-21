@@ -7,6 +7,8 @@ on:
       - 'wrangler.jsonc'
       - 'site/**'
       - 'src/*/dist/**'
+      - 'src/turris-altissima/oauth-worker.js'
+      - 'src/turris-altissima/src/google-config.js'
       - 'scripts/assemble-site.sh'
       - '.github/workflows/deploy.yml'
   workflow_dispatch:

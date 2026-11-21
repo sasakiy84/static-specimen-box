@@ -1,7 +1,14 @@
 {
   "name": "static-specimen-box",
+  "main": "src/turris-altissima/oauth-worker.js",
   "compatibility_date": "2026-11-20",
+  "durable_objects": {
+    "bindings": [{ "name": "DRIVE_SESSIONS", "class_name": "DriveSession" }]
+  },
+  "migrations": [{ "tag": "drive-sessions-v1", "new_sqlite_classes": ["DriveSession"] }],
   "assets": {
-    "directory": "./_site"
+    "directory": "./_site",
+    "binding": "ASSETS",
+    "run_worker_first": ["/turris-altissima/auth/*"]
   }
 }

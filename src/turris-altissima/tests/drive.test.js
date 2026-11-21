@@ -4,6 +4,32 @@ import { createDrive, folderIdFromLink } from '../src/drive.js';
 
 const session = { token: 'test-token', expiresAt: Date.now() + 3600_000 };
 
+test('renews the access token before sending an expired session to Drive', async () => {
+  const expired = {
+    token: 'expired-access', expiresAt: Date.now() - 1,
+    async renew() { this.token = 'renewed-access'; this.expiresAt = Date.now() + 3600_000; },
+  };
+  const drive = createDrive(expired, async (_address, { headers }) => {
+    assert.equal(headers.get('Authorization'), 'Bearer renewed-access');
+    return Response.json({ id: 'file-1' });
+  });
+  assert.deepEqual(await drive.get('file-1'), { id: 'file-1' });
+});
+
+test('retries a Drive request once with a new token if Google rejects the current one', async () => {
+  const renewable = {
+    ...session,
+    async renew(force) { assert.equal(force, true); this.token = 'renewed-access'; },
+  };
+  const sent = [];
+  const drive = createDrive(renewable, async (_address, { headers }) => {
+    sent.push(headers.get('Authorization'));
+    return new Response(null, { status: 401 });
+  });
+  await assert.rejects(drive.get('file-1'), { status: 401 });
+  assert.deepEqual(sent, ['Bearer test-token', 'Bearer renewed-access']);
+});
+
 test('lists every page within the requested folder using the session token', async () => {
   const drive = createDrive(session, async (address, options) => {
     const { searchParams } = new URL(address);
