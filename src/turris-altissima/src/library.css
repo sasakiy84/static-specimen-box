@@ -157,7 +157,7 @@ input::placeholder {
 }
 .controls .advanced-toggle {
   min-height: 44px;
-  gap: 6px;
+  gap: 8px;
   white-space: nowrap;
 }
 .advanced-toggle::after {
@@ -173,9 +173,18 @@ input::placeholder {
   margin: 3px 0 0;
   transform: rotate(225deg);
 }
-.advanced-count {
-  font-size: 11px;
-  color: var(--muted);
+.advanced-label {
+  position: relative;
+}
+.advanced-toggle[data-filtered] .advanced-label::after {
+  content: "";
+  position: absolute;
+  inset-block-start: 1px;
+  inset-inline-end: -5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
 }
 .advanced-filters {
   display: grid;

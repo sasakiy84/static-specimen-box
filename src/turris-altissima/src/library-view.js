@@ -9,7 +9,7 @@ const queryInput = byId('search'), tagInput = byId('tag-query'), yearSelect = by
 sortSelect.value = 'id-desc';
 const list = byId('list'), count = byId('count'), empty = byId('empty'), template = byId('entry-template');
 const clearFilters = byId('clear-filters');
-const advancedToggle = byId('advanced-toggle'), advancedFilters = byId('advanced-filters'), advancedCount = byId('advanced-count');
+const advancedToggle = byId('advanced-toggle'), advancedFilters = byId('advanced-filters');
 const suggestions = byId('tag-suggestions'), tagError = byId('tag-error'), panel = byId('detail-panel');
 const collator = new Intl.Collator('ja', { numeric: true, sensitivity: 'base' });
 let entries = [], catalog = [], entriesById = new Map(), searchIndex = new Map();
@@ -107,9 +107,10 @@ function render() {
     byId('empty-message').textContent = entries.length ? '一致する文献はありません。' : '文献はまだ登録されていません。';
     clearFilters.hidden = !entries.length || found.length > 0;
     byId('clear-tags').disabled = !tagInput.value;
-    const applied = [yearSelect.value, typeSelect.value, tagExpression].filter(Boolean).length;
-    advancedCount.hidden = applied === 0;
-    advancedCount.textContent = applied ? applied + '条件' : '';
+    const filtered = Boolean(yearSelect.value || typeSelect.value || tagExpression);
+    advancedToggle.toggleAttribute('data-filtered', filtered);
+    if (filtered) advancedToggle.setAttribute('aria-label', '詳細検索（絞り込み中）');
+    else advancedToggle.removeAttribute('aria-label');
 }
 function setAdvancedSearch(open) {
     advancedFilters.hidden = !open;
