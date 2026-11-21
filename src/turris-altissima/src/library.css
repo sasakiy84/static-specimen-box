@@ -321,9 +321,7 @@ input::placeholder {
   -webkit-tap-highlight-color: transparent;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px 16px;
+  gap: 12px;
   border-block-end: 1px solid var(--border);
   padding: 12px 0;
   cursor: pointer;
@@ -343,7 +341,7 @@ input::placeholder {
   color: var(--text);
 }
 .entry-content {
-  flex: 1 1 300px;
+  flex: 1;
   min-width: 0;
 }
 .entry h2 {
@@ -371,22 +369,19 @@ input::placeholder {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.entry-tools {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 10px;
+.entry-meta .entry-tags {
+  gap: 2px 6px;
   min-width: 0;
-  max-width: min(100%, 320px);
 }
-.entry-tools .tags,
-.entry-tools .links {
-  min-width: 0;
-  gap: 5px;
-  margin: 0;
+.entry-tags .tag {
+  min-height: 24px;
+  padding-block: 1px;
 }
-.entry-tools .action {
-  padding-inline: 8px;
+.entry-pdf {
+  flex: none;
+}
+.entry-pdf .action {
+  padding-inline: 9px;
 }
 .links {
   display:flex;
@@ -528,7 +523,7 @@ input::placeholder {
 .detail-copy-row {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
+  align-items: center;
   gap: 10px;
 }
 .detail-copy-actions {
@@ -541,8 +536,9 @@ input::placeholder {
   padding: 0;
 }
 .detail-copy-label {
-  padding-block: 5px;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 #detail-copy-status:empty {
   display: none;

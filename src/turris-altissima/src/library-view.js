@@ -86,10 +86,12 @@ function renderEntry(entry) {
     const tags = article.querySelector('.entry-tags');
     (entry.tags || []).forEach(tag => tags.append(tagButton(tag)));
     tags.hidden = !tags.childElementCount;
-    const links = article.querySelector('.links');
-    fillLinks(links, entry);
-    links.hidden = !links.childElementCount;
-    article.querySelector('.entry-tools').hidden = tags.hidden && links.hidden;
+    const pdf = (entry.originals || []).find(file => /\.pdf$/i.test(file.name) && LibraryCore.safeUrl(file.url));
+    if (pdf) {
+        const shortcut = article.querySelector('.entry-pdf');
+        addLink(shortcut, 'PDF', pdf.url, pdf.name);
+        shortcut.hidden = false;
+    }
     article.addEventListener('click', event => {
         if (event.target.closest('a,button,input,select,textarea') || window.getSelection()?.toString())
             return;
@@ -556,7 +558,9 @@ function renderDetailCopies(entry) {
         if (!text) continue;
         const row = byId('detail-copy-row-template').content.firstElementChild.cloneNode(true);
         row.setAttribute('aria-label', label);
-        row.querySelector('.detail-copy-label').textContent = text;
+        const value = row.querySelector('.detail-copy-label');
+        value.textContent = text;
+        value.title = text;
         for (const [selector, name, operation] of [
             ['.copy-detail-text', 'コピー', () => copyText(text)],
             ['.copy-detail-link', 'リンク付きコピー', () => copyEntryLink(text, url)],
