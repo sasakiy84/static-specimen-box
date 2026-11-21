@@ -227,12 +227,9 @@ input::placeholder {
   background: var(--accent);
   color: var(--surface);
 }
-.tag-help-row {
-  display:flex;
-  align-items:baseline;
-  justify-content:space-between;
-  gap:14px;
-  margin-top:7px
+#clear-tags {
+  display: block;
+  margin: 7px 0 0 auto;
 }
 .field-help {
   margin:6px 0
@@ -670,13 +667,6 @@ input::placeholder {
 .tablist {
   padding-inline: 12px;
 }
-.tag-help-row {
-  align-items:flex-start
-}
-.tag-help-row .field-help {
-  font-size:12px;
-  margin:0
-}
 .details {
   grid-template-columns:78px minmax(0,1fr);
   gap:12px
@@ -702,9 +692,6 @@ input::placeholder {
 @media(max-width:350px) {
   .advanced-filters {
   grid-template-columns:minmax(0,1fr)
-}
-.tag-help-row {
-  flex-wrap:wrap
 }
 .sort-wrap label {
   display:none

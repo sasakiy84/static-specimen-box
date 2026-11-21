@@ -70,10 +70,10 @@
         <div class="tag-search">
           <label for="tag-query">タグ</label>
           <div class="tag-combobox">
-            <input id="tag-query" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="tag-suggestions" aria-describedby="tag-help tag-error" autocomplete="off" spellcheck="false" placeholder="タグを選択、または (日本語 OR 英語) AND 読解">
+            <input id="tag-query" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="tag-suggestions" aria-describedby="tag-error" autocomplete="off" spellcheck="false" placeholder="タグを選択、または (日本語 OR 英語) AND 読解">
             <ul id="tag-suggestions" class="suggestions" role="listbox" aria-label="タグの候補" hidden></ul>
           </div>
-          <div class="tag-help-row"><p id="tag-help" class="field-help">複数選択は OR。AND・OR・括弧で組み合わせられます。</p><button id="clear-tags" type="button" class="text-button">タグを解除</button></div>
+          <button id="clear-tags" type="button" class="text-button">タグを解除</button>
           <p id="tag-error" class="field-error" role="status" hidden></p>
           <div id="recent-wrap" class="recent-wrap" hidden><span class="small-label">最近使ったタグ</span><div id="recent-tags" class="tags" aria-label="最近更新されたBibのタグ"></div></div>
         </div>
