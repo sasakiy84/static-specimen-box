@@ -16,7 +16,7 @@
         <img class="brand-mark" src="/assets/brand/mark.png" width="44" height="44" alt="">
         <h1 tabindex="-1" data-page-heading>turris-altissima</h1>
       </div>
-      <div id="workspace-header" class="workspace-header" hidden>
+      <div id="workspace-header" class="workspace-header">
         <div class="workspace-actions" role="group" aria-label="文献ライブラリの操作">
           <button id="refresh-csv" type="button" class="action-button icon-button" aria-label="一覧・CSV を更新" title="一覧・CSV を更新" hidden>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -29,15 +29,15 @@
               <path d="M12 5v14M5 12h14"/>
             </svg>
           </a>
-          <a id="open-settings" class="action-button icon-button" data-route="settings" href="./settings/" aria-label="設定" title="設定" hidden>
+          <a id="open-settings" class="action-button icon-button" data-route="settings" href="./settings/" aria-label="設定" title="設定">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M10 3h4l.6 2.4 1.5.9 2.4-.7 2 3.5-1.8 1.7v1.9l1.8 1.7-2 3.5-2.4-.7-1.5.9L14 21h-4l-.6-2.9-1.5-.9-2.4.7-2-3.5 1.8-1.7v-1.9L3.5 9.1l2-3.5 2.4.7 1.5-.9L10 3Z"/>
               <circle cx="12" cy="12" r="2.7"/>
             </svg>
           </a>
-          <button id="disconnect-drive" type="button" class="action-button">ログアウト</button>
+          <button id="disconnect-drive" type="button" class="action-button" hidden>ログアウト</button>
         </div>
-        <p class="workspace-identity">
+        <p id="workspace-identity" class="workspace-identity" hidden>
           <span id="workspace-account" hidden></span>
           <a id="workspace-folder" target="_blank" rel="noopener noreferrer" title="Google Drive で文献フォルダを開く" hidden></a>
         </p>
@@ -82,7 +82,6 @@
       <button id="clear-filters" type="button" class="action-button" hidden>絞り込みを解除</button>
     </div>
     </div>
-    <footer class="footer"><a href="https://citeproc-js.readthedocs.io/" target="_blank" rel="noopener noreferrer">参考文献整形：citeproc-js / Frank Bennett</a><button id="show-licenses" type="button" class="text-button">ライセンス</button></footer>
   </main>
 
   <template id="entry-template">
@@ -132,6 +131,7 @@
         <p id="bib-status" class="copy-status" role="status"></p>
       </section>
       <section id="pane-references" role="tabpanel" aria-labelledby="tab-references" hidden>
+        <p class="field-help">© Frank Bennett · <a href="https://citationstyles.org/" target="_blank" rel="noopener noreferrer">citeproc-js implements the Citation Style Language</a></p>
         <div id="citation-list" class="citation-list" aria-label="参考文献の全書式"></div>
       </section>
     </div>
@@ -166,7 +166,6 @@
       <p class="citation-status copy-status" role="status"></p>
     </section>
   </template>
-  <dialog id="license-panel" class="license-panel" aria-labelledby="license-heading"><div class="pane-toolbar"><h2 id="license-heading">使用ライブラリ・書式</h2><button id="close-licenses" type="button" class="action-button" autofocus>閉じる</button></div><pre id="license-text" class="preserve-lines"></pre></dialog>
   <dialog id="edit-dialog" class="edit-dialog" aria-labelledby="edit-title">
     <form id="edit-form">
       <div class="pane-toolbar"><h2 id="edit-title"></h2><button id="close-edit" type="button" class="action-button">閉じる</button></div>
@@ -265,6 +264,16 @@
       <p id="settings-status" class="connection-progress" role="status" hidden></p>
       <p id="settings-error" class="field-error" role="alert" hidden></p>
     </section>
+    <details id="licenses" class="settings-section settings-licenses">
+      <summary>ライセンス</summary>
+      <ul>
+        <li><a href="https://citeproc-js.readthedocs.io/" target="_blank" rel="noopener noreferrer">citeproc-js / Frank Bennett</a></li>
+        <li><a href="../THIRD_PARTY.md">参考文献の書式と出典</a></li>
+        <li><a href="../THIRD-PARTY-NOTICES.md">配布ライブラリのライセンス</a></li>
+      </ul>
+      <p id="license-status" class="field-help" role="status" hidden></p>
+      <pre id="license-text" class="preserve-lines" aria-label="参考文献整形のライセンス全文" tabindex="0" hidden></pre>
+    </details>
   </main>
 </body>
 </html>

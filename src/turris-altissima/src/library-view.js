@@ -350,7 +350,7 @@ modalPanel.addEventListener('change', () => {
     }
 });
 document.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && !event.isComposing && panel.open && !modalPanel.matches && !document.querySelector('.edit-dialog[open], #license-panel[open]') && event.target !== tagInput) {
+    if (event.key === 'Escape' && !event.isComposing && panel.open && !modalPanel.matches && !document.querySelector('.edit-dialog[open]') && event.target !== tagInput) {
         event.preventDefault();
         closeDetails();
     }
@@ -575,17 +575,6 @@ function renderDetailCopies(entry) {
     }
     byId('detail-copy').replaceChildren(...rows);
 }
-byId('show-licenses').addEventListener('click', async () => {
-    byId('license-text').textContent = 'ライセンスを読み込んでいます…';
-    if (!byId('license-panel').open) byId('license-panel').showModal();
-    try {
-        await citationAssets();
-        byId('license-text').textContent = globalThis.CitationAssets.licenses;
-    } catch (error) {
-        byId('license-text').textContent = error.message;
-    }
-});
-byId('close-licenses').addEventListener('click', () => byId('license-panel').close());
 export function syncLibraryRoute() {
     detailSlot = history.state?.libraryDetailSlot === true;
     applyPanelRoute();

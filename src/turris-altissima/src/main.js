@@ -7,6 +7,7 @@ import { createDrive, DriveError, folderIdFromLink, getAccessToken } from './dri
 import { createWorkspace } from './workspace.js';
 import { readBibAnnotations, writeBibAnnotations } from './catalog.js';
 import { browserCatalogCache } from './catalog-cache.js';
+import { citationAssets } from './citation-assets.js';
 import { demoDrive } from './demo.js';
 import { forgetDriveSession, loadDriveSession, saveDriveSession } from './drive-session.js';
 import { forgetServerSession, loginUrl, readServerSession, renewableSession } from './persistent-auth.js';
@@ -86,7 +87,6 @@ function updateButtons() {
   byId('connection-setup').hidden = Boolean(workspace);
   setupFolder.hidden = !driveReady || Boolean(workspace);
   setupFolder.setAttribute('aria-disabled', String(isBusy));
-  openSettings.hidden = !driveReady;
   openSettings.setAttribute('aria-disabled', String(isBusy));
   byId('settings-folder-controls').hidden = !driveReady;
   byId('settings-folder-empty').hidden = Boolean(workspace);
@@ -95,7 +95,8 @@ function updateButtons() {
   byId('open-folder-link').disabled = isBusy;
   demoButton.hidden = sample || Boolean(progress || connected);
   demoButton.setAttribute('aria-disabled', String(isBusy));
-  byId('workspace-header').hidden = !(driveReady || workspace);
+  disconnect.hidden = !(driveReady || workspace);
+  byId('workspace-identity').hidden = disconnect.hidden;
   disconnect.textContent = workspace?.isDemo ? 'サンプルを閉じる' : 'ログアウト';
   refresh.hidden = newEntry.hidden = !workspace;
   setText('workspace-account', driveReady ? connected.user.displayName || 'Google Drive' : workspace?.isDemo ? workspace.service.root.name : '');
@@ -109,6 +110,20 @@ function updateButtons() {
     button.disabled = isBusy;
   }
 }
+
+const licenses = byId('licenses');
+const licenseText = byId('license-text');
+licenses.addEventListener('toggle', async () => {
+  if (!licenses.open || !licenseText.hidden) return;
+  setText('license-status', 'ライセンスを読み込んでいます…');
+  try {
+    await citationAssets();
+    setText('license-text', globalThis.CitationAssets.licenses);
+    setText('license-status', '');
+  } catch {
+    setText('license-status', 'ライセンス本文を読み込めませんでした。');
+  }
+});
 
 function scopeKey(userId, rootId) {
   return `bibliography-control:${encodeURIComponent(userId)}:${encodeURIComponent(rootId)}`;
