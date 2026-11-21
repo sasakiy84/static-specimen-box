@@ -3,13 +3,22 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f3ef">
+  <link rel="icon" href="../assets/brand/favicon.ico" sizes="16x16 32x32 48x48">
+  <link rel="apple-touch-icon" href="../assets/brand/apple-touch-icon.png" sizes="180x180">
   <title>文献を追加 | turris-altissima</title>
-  <script type="module" crossorigin src="../assets/index-B6cwh2nz.js"></script>
-  <link rel="stylesheet" crossorigin href="../assets/index-D35iLjlg.css">
+  <script type="module" crossorigin src="../assets/index-BgkLXoc3.js"></script>
+  <link rel="stylesheet" crossorigin href="../assets/index-DLyfs-rD.css">
 </head>
 <body>
   <main class="page" id="main" data-page="library" hidden>
-    <header class="heading"><h1 tabindex="-1" data-page-heading>turris-altissima</h1><p class="updated" id="csv-updated" hidden></p></header>
+    <header class="heading library-heading">
+      <img class="brand-mark" src="../assets/brand/mark.png" width="44" height="44" alt="">
+      <div>
+        <h1 tabindex="-1" data-page-heading>turris-altissima</h1>
+        <p class="updated" id="csv-updated" hidden></p>
+      </div>
+    </header>
     <section class="connection" aria-label="Google Drive 接続">
       <div class="connection-actions">
         <button id="connect-drive" type="button" class="action-button primary-action" hidden>Google Drive に接続</button>
@@ -150,7 +159,9 @@
   <main id="formatter-page" class="page formatter-page" data-page="new">
     <header class="editor-page-header">
       <nav class="editor-page-links" aria-label="ナビゲーション">
-        <a data-route="library" href="../">文献一覧に戻る</a>
+        <a class="editor-home" data-route="library" href="../">
+          <img src="../assets/brand/mark.png" width="23" height="23" alt="">文献一覧に戻る
+        </a>
         <a data-route="prompt" href="../prompt/">LLM 用プロンプト</a>
       </nav>
       <h1 tabindex="-1" data-page-heading>文献を追加</h1>
@@ -171,7 +182,9 @@
   <main id="prompt-page" class="page prompt-page" data-page="prompt" hidden>
     <header class="editor-page-header">
       <nav class="editor-page-links" aria-label="ナビゲーション">
-        <a data-route="library" href="../">文献一覧に戻る</a>
+        <a class="editor-home" data-route="library" href="../">
+          <img src="../assets/brand/mark.png" width="23" height="23" alt="">文献一覧に戻る
+        </a>
         <a data-route="new" href="../new/">文献を追加</a>
       </nav>
       <h1 tabindex="-1" data-page-heading>LLM 用プロンプト</h1>

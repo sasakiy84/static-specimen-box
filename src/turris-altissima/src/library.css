@@ -1,12 +1,22 @@
 :root {
-  color-scheme:light;
-  --bg:#f6f8fa;
-  --surface:#fff;
-  --text:#202b38;
-  --muted:#5c6b79;
-  --border:#d7dfe7;
-  --accent:#24557c;
-  --focus:#1277ac
+  color-scheme: light;
+  --bg: #f7f3ef;
+  --surface: #fffcfa;
+  --surface-inset: #f9f4f1;
+  --text: #2a2025;
+  --muted: #69565d;
+  --placeholder: #776069;
+  --border: #e3d7d4;
+  --input-border: #9b8188;
+  --accent: #76283f;
+  --accent-strong: #56192b;
+  --accent-soft: #f5e9ed;
+  --accent-soft-hover: #edd9e0;
+  --accent-border: #d8bdc5;
+  --focus: #8b3250;
+  --error: #a12638;
+  --shadow: rgb(58 25 36 / .16);
+  --backdrop: rgb(47 22 32 / .24);
 }
 
 * {
@@ -51,6 +61,29 @@ a {
 .heading {
   margin-bottom:26px
 }
+.library-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.library-heading > div {
+  min-width: 0;
+}
+.brand-mark {
+  flex: none;
+}
+.library-heading h1 {
+  margin: 0;
+  color: var(--accent);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(28px, 4vw, 40px);
+  font-weight: 600;
+  letter-spacing: -.035em;
+  overflow-wrap: anywhere;
+}
+.library-heading .updated {
+  margin-top: 4px;
+}
 h1 {
   font-size:clamp(26px,3vw,34px);
   line-height:1.3;
@@ -83,14 +116,14 @@ label {
 input,select {
   width:100%;
   height:44px;
-  border:1px solid #aebdcb;
+  border:1px solid var(--input-border);
   border-radius:7px;
   padding:0 12px;
-  background:#fff;
+  background:var(--surface);
   font-size:15px
 }
 input::placeholder {
-  color:#718190
+  color:var(--placeholder)
 }
 .tag-search {
   grid-column:1/-1
@@ -106,9 +139,9 @@ input::placeholder {
   list-style:none;
   max-height:270px;
   overflow:auto;
-  background:#fff;
-  border:1px solid #aebdcb;
-  box-shadow:0 6px 18px #20304020;
+  background:var(--surface);
+  border:1px solid var(--input-border);
+  box-shadow:0 6px 18px var(--shadow);
   border-radius:8px
 }
 .suggestions li {
@@ -122,7 +155,7 @@ input::placeholder {
   overflow-wrap:anywhere
 }
 .suggestions [aria-selected=true],.suggestions li:hover {
-  background:#eaf2f8
+  background:var(--accent-soft)
 }
 .suggestions small {
   white-space:nowrap;
@@ -150,7 +183,7 @@ input::placeholder {
   text-decoration:underline
 }
 .field-error {
-  color:#9a2833;
+  color:var(--error);
   font-size:14px;
   margin:8px 0
 }
@@ -175,9 +208,9 @@ input::placeholder {
   gap:7px
 }
 .tag {
-  background:#edf3f8;
-  border:1px solid #c8d9e6;
-  color:#234f70;
+  background:var(--accent-soft);
+  border:1px solid var(--accent-border);
+  color:var(--accent);
   border-radius:16px;
   padding:4px 10px;
   font-size:12px;
@@ -187,7 +220,7 @@ input::placeholder {
   line-height:1.5
 }
 .tag:hover {
-  background:#ddebf5
+  background:var(--accent-soft-hover)
 }
 .toolbar {
   display:flex;
@@ -223,14 +256,14 @@ input::placeholder {
   display:grid;
   grid-template-columns:90px minmax(0,1fr);
   gap:20px;
-  background:#fff;
+  background:var(--surface);
   border:1px solid var(--border);
   border-radius:10px;
   padding:22px;
   cursor:pointer
 }
 .entry:hover {
-  border-color:#9fb7ca
+  border-color:var(--input-border)
 }
 .entry-meta {
   font-size:13px;
@@ -258,8 +291,8 @@ input::placeholder {
 .entry-type {
   display:inline-block;
   font-size:12px;
-  color:#3c5063;
-  background:#eef1f4;
+  color:var(--muted);
+  background:var(--surface-inset);
   border-radius:4px;
   padding:2px 7px
 }
@@ -286,7 +319,7 @@ input::placeholder {
   overflow-wrap:anywhere
 }
 .authors {
-  color:#3e5061
+  color:var(--text)
 }
 .publication {
   color:var(--muted)
@@ -306,8 +339,8 @@ input::placeholder {
   align-items:center;
   min-height:34px;
   max-width:100%;
-  border:1px solid #c1d1df;
-  background:#fff;
+  border:1px solid var(--accent-border);
+  background:var(--surface);
   border-radius:6px;
   padding:5px 11px;
   color:var(--accent);
@@ -317,12 +350,12 @@ input::placeholder {
   overflow-wrap:anywhere
 }
 .action:hover,.action-button:hover {
-  background:#edf4f9
+  background:var(--accent-soft)
 }
 .empty {
   padding:48px 20px;
   text-align:center;
-  background:#fff;
+  background:var(--surface);
   border:1px dashed var(--border);
   border-radius:10px;
   color:var(--muted)
@@ -355,8 +388,8 @@ input::placeholder {
   padding:0;
   border:0;
   border-left:1px solid var(--border);
-  box-shadow:-8px 0 30px #182f4920;
-  background:#fff;
+  box-shadow:-8px 0 30px var(--shadow);
+  background:var(--surface);
   color:var(--text)
 }
 .panel[open] {
@@ -364,7 +397,7 @@ input::placeholder {
   flex-direction:column
 }
 .panel::backdrop,.license-panel::backdrop {
-  background:#172b4430
+  background:var(--backdrop)
 }
 .panel-header {
   display:flex;
@@ -390,7 +423,7 @@ input::placeholder {
 }
 .close-button {
   border:1px solid var(--border);
-  background:#fff;
+  background:var(--surface);
   border-radius:6px;
   padding:6px 10px;
   font-size:13px;
@@ -405,13 +438,13 @@ input::placeholder {
 [role=tab] {
   border:0;
   border-radius:5px;
-  background:#fff;
+  background:var(--surface);
   padding:9px 16px;
   font-size:14px
 }
 [role=tab][aria-selected=true] {
-  background:#e9f1f7;
-  color:#204f70;
+  background:var(--accent-soft);
+  color:var(--accent);
   font-weight:700
 }
 .panel-scroll {
@@ -496,7 +529,7 @@ input::placeholder {
   height:60dvh;
   min-height:300px;
   resize:vertical;
-  background:#f8fafb;
+  background:var(--surface-inset);
   border:1px solid var(--border);
   border-radius:7px;
   padding:14px;
@@ -531,6 +564,8 @@ input::placeholder {
   font-size:13px
 }
 .license-panel {
+  color: var(--text);
+  background: var(--surface);
   width:min(760px,92vw);
   max-height:85dvh;
   border:1px solid var(--border);
@@ -688,7 +723,7 @@ body.panel-open .toolbar {
   flex: 1 1 240px;
   min-width: 0;
   padding: 7px 10px;
-  border: 1px solid #a7bac9;
+  border: 1px solid var(--input-border);
   border-radius: 6px;
   font: inherit;
   color: inherit;
@@ -700,8 +735,8 @@ body.panel-open .toolbar {
 #entry-message { margin: 0; padding: 8px 24px; border-bottom: 1px solid var(--border); }
 #entry-message:empty, #editable-notes:empty { display: none; }
 #attachment-actions, #editable-notes, #bib-annotations-actions { margin-top: 12px; }
-.primary-action { background: var(--accent); border-color: var(--accent); color: white; }
-.primary-action:hover:not(:disabled) { background: #1a4566; color: white; }
+.primary-action { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.primary-action:hover:not(:disabled) { background: var(--accent-strong); color: var(--surface); }
 button:disabled { cursor: default; opacity: .65; }
 .edit-dialog {
   width: min(760px, calc(100% - 28px));
@@ -712,7 +747,7 @@ button:disabled { cursor: default; opacity: .65; }
   background: var(--surface);
   color: var(--text);
 }
-.edit-dialog::backdrop { background: rgb(24 37 52 / .52); }
+.edit-dialog::backdrop { background: var(--backdrop); }
 .edit-dialog h2 { margin: 0; font-size: 1.25rem; }
 #edit-file { overflow-wrap: anywhere; }
 .edit-dialog .bib-source { margin: 8px 0 0; min-height: min(370px, 50vh); }
@@ -736,7 +771,7 @@ button:disabled { cursor: default; opacity: .65; }
   flex: 1 1 165px;
   min-width: 0;
   padding: 7px 10px;
-  border: 1px solid #a7bac9;
+  border: 1px solid var(--input-border);
   border-radius: 6px;
   font: inherit;
   color: inherit;

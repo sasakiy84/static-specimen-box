@@ -1,6 +1,7 @@
 .editor-page-header { margin-bottom: 22px; }
-.editor-page-links { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-bottom: 20px; font-size: 14px; }
+.editor-page-links { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; margin-bottom: 20px; font-size: 14px; }
 .editor-page-links a { text-underline-offset: 3px; }
+.editor-home { display: inline-flex; align-items: center; gap: 3px; }
 .formatter-page { max-width: 1180px; }
 .prompt-page { max-width: 960px; }
 .editor-card {
@@ -39,7 +40,7 @@ a.action-button[aria-disabled="true"] { opacity: .65; cursor: default; }
 .language-tools > span { color: var(--muted); font-size: 13px; font-weight: 700; }
 .language-buttons { display: flex; flex-wrap: wrap; gap: 4px; }
 .language-buttons button[aria-pressed="true"],
-#tag-candidate-buttons button[aria-pressed="true"] { border-color: #7ca0ba; background: #e9f1f7; }
+#tag-candidate-buttons button[aria-pressed="true"] { border-color: var(--input-border); background: var(--accent-soft); }
 #other-language-label { display: flex; align-items: center; gap: 6px; margin: 0; }
 #other-language { width: 130px; height: 36px; }
 .editor-panes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 14px; }
@@ -49,9 +50,9 @@ a.action-button[aria-disabled="true"] { opacity: .65; cursor: default; }
 .prompt-card pre {
   box-sizing: border-box;
   color: var(--text);
-  border: 1px solid #aebdcb;
+  border: 1px solid var(--input-border);
   border-radius: 7px;
-  background: #fbfcfd;
+  background: var(--surface-inset);
   font: 13px/1.65 ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 .editor-pane textarea {
