@@ -7,23 +7,44 @@
   <link rel="icon" href="./assets/brand/favicon.ico" sizes="16x16 32x32 48x48">
   <link rel="apple-touch-icon" href="./assets/brand/apple-touch-icon.png" sizes="180x180">
   <title>turris-altissima</title>
-  <script type="module" crossorigin src="./assets/index-BgkLXoc3.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-DLyfs-rD.css">
+  <script type="module" crossorigin src="./assets/index-CT1WtLn_.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-C0tyFjT_.css">
 </head>
 <body>
   <main class="page" id="main" data-page="library">
     <header class="heading library-heading">
-      <img class="brand-mark" src="./assets/brand/mark.png" width="44" height="44" alt="">
-      <div>
-        <h1 tabindex="-1" data-page-heading>turris-altissima</h1>
-        <p class="updated" id="csv-updated" hidden></p>
+      <div class="library-brand">
+        <img class="brand-mark" src="./assets/brand/mark.png" width="44" height="44" alt="">
+        <div>
+          <h1 tabindex="-1" data-page-heading>turris-altissima</h1>
+          <p class="updated" id="csv-updated" hidden></p>
+        </div>
+      </div>
+      <div id="workspace-header" class="workspace-header" hidden>
+        <div class="workspace-actions" role="group" aria-label="文献ライブラリの操作">
+          <button id="refresh-csv" type="button" class="action-button icon-button" aria-label="一覧・CSV を更新" title="一覧・CSV を更新" hidden>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M20 5v5h-5M4 19v-5h5"/>
+              <path d="M5.1 9a7.5 7.5 0 0 1 12.2-2.6L20 10M4 14l2.7 3.6A7.5 7.5 0 0 0 18.9 15"/>
+            </svg>
+          </button>
+          <a id="new-entry" class="action-button primary-action icon-button" data-route="new" href="./new/" aria-label="文献を追加" title="文献を追加" hidden>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+              <path d="M12 5v14M5 12h14"/>
+            </svg>
+          </a>
+          <button id="disconnect-drive" type="button" class="action-button">ログアウト</button>
+        </div>
+        <p class="workspace-identity">
+          <span id="workspace-account" hidden></span>
+          <a id="workspace-folder" target="_blank" rel="noopener noreferrer" title="Google Drive で文献フォルダを開く" hidden></a>
+        </p>
       </div>
     </header>
-    <section class="connection" aria-label="Google Drive 接続">
+    <section id="connection-setup" class="connection" aria-label="Google Drive 接続">
       <div class="connection-actions">
         <button id="connect-drive" type="button" class="action-button primary-action" hidden>Google Drive に接続</button>
-        <button id="choose-folder" type="button" class="action-button" hidden>文献フォルダを選択</button>
-        <button id="disconnect-drive" type="button" class="text-button" hidden>接続を解除</button>
+        <button id="choose-folder" type="button" class="action-button primary-action" hidden>文献フォルダを選択</button>
         <a id="open-demo" class="text-button" data-route="library" data-sample="true" href="?sample=1">サンプルを見る</a>
       </div>
       <details id="folder-link" class="folder-link" hidden>
@@ -36,19 +57,10 @@
           </div>
         </form>
       </details>
-      <div id="workspace-bar" hidden>
-        <p class="workspace-name">
-          <a id="workspace-folder" target="_blank" rel="noopener noreferrer" hidden></a><span id="workspace-name"></span>
-        </p>
-        <div class="connection-actions">
-          <button id="refresh-csv" type="button" class="action-button">一覧・CSV を更新</button>
-          <a id="new-entry" class="action-button primary-action" data-route="new" href="./new/">文献を追加</a>
-        </div>
-      </div>
       <p id="connection-progress" class="connection-progress" role="status">読み込み中…</p>
-      <p id="workspace-status" role="status" hidden></p>
-      <p id="workspace-error" class="field-error" role="alert" hidden></p>
     </section>
+    <p id="workspace-status" class="workspace-notice" role="status" hidden></p>
+    <p id="workspace-error" class="workspace-notice field-error" role="alert" hidden></p>
     <div id="library-content" hidden>
     <p id="schema-message" class="notice" hidden>詳細情報を表示するには「一覧・CSV を更新」を押してください。</p>
     <section class="controls" id="library-filters" role="search" aria-label="文献を検索・絞り込み">

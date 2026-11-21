@@ -76,19 +76,18 @@ function updateButtons() {
   byId('formatter-connection-help').textContent = driveReady
     ? '文献一覧で、接続する文献フォルダを選択してください。'
     : '文献一覧で Google Drive に接続し、文献フォルダを選択してください。';
-  connect.hidden = !googleEnabled || sample || restoringSession || !authReady;
+  connect.hidden = !googleEnabled || sample || restoringSession || !authReady || Boolean(connected);
   connect.disabled = isBusy;
-  connect.textContent = connected ? 'アカウントを切り替え' : 'Google Drive に接続';
-  connect.classList.toggle('primary-action', !connected);
-  folderButton.hidden = folderLink.hidden = !driveReady;
-  folderButton.classList.toggle('primary-action', driveReady && !workspace);
+  byId('connection-setup').hidden = Boolean(workspace);
+  folderButton.hidden = folderLink.hidden = !driveReady || Boolean(workspace);
   folderInput.disabled = isBusy;
   byId('open-folder-link').disabled = isBusy;
-  demoButton.hidden = sample;
+  demoButton.hidden = sample || Boolean(connected);
   demoButton.setAttribute('aria-disabled', String(isBusy));
-  disconnect.hidden = !driveReady && !workspace?.isDemo;
-  disconnect.textContent = connected ? '接続を解除' : 'サンプルを閉じる';
-  byId('workspace-bar').hidden = !workspace;
+  byId('workspace-header').hidden = !(driveReady || workspace);
+  disconnect.textContent = workspace?.isDemo ? 'サンプルを閉じる' : 'ログアウト';
+  refresh.hidden = newEntry.hidden = !workspace;
+  setText('workspace-account', driveReady ? connected.user.displayName || 'Google Drive' : workspace?.isDemo ? workspace.service.root.name : '');
   byId('attachment-actions').hidden = !workspace || !currentEntry;
   editButton.hidden = !workspace || !currentEntry;
   byId('bib-annotations-actions').hidden = editButton.hidden;
@@ -128,7 +127,6 @@ function clearWorkspace({ reset = true } = {}) {
   resetFormatter();
   resetFolderLink();
   setCatalog(null, reset && hadWorkspace);
-  setText('workspace-name', '');
   setWorkspaceFolder();
   setText('workspace-status', '');
   updateButtons();
@@ -193,7 +191,6 @@ async function selectWorkspace(drive, id, userId, isDemo = false) {
   currentEntry = undefined;
   dirty = false;
   setWorkspaceFolder(isDemo ? null : next.root);
-  setText('workspace-name', isDemo ? `${next.root.name} · この画面内` : ` · ${connected.user.displayName || 'Google Drive'}`);
   setCatalog(nextCatalog, reset);
   setText('workspace-status', nextCatalog.modifiedAt ? '' : '「一覧・CSV を更新」で文献一覧を生成できます。');
   resetFolderLink();
@@ -245,36 +242,47 @@ async function readyIdentity() {
   }
 }
 
-connect.addEventListener('click', () => action(async () => {
-  if (!globalThis.google?.accounts?.oauth2) await loadIdentity();
-  await connectWith(await authorize(), true);
-}));
-folderButton.addEventListener('click', () => action(async () => {
-  const id = await pickFolder(getAccessToken(connected.session));
-  if (id) await selectWorkspace(connected.drive, id, connected.user.permissionId);
-}));
-folderForm.addEventListener('submit', event => {
+connect.addEventListener('click', async () => {
+  await action(async () => {
+    if (!globalThis.google?.accounts?.oauth2) await loadIdentity();
+    await connectWith(await authorize(), true);
+  });
+  if (connected) (workspace ? refresh : folderButton).focus();
+});
+folderButton.addEventListener('click', async () => {
+  await action(async () => {
+    const id = await pickFolder(getAccessToken(connected.session));
+    if (id) await selectWorkspace(connected.drive, id, connected.user.permissionId);
+  });
+  if (connected) (workspace ? refresh : folderButton).focus();
+});
+folderForm.addEventListener('submit', async event => {
   event.preventDefault();
   if (!connected) return;
-  void action(async () => {
+  await action(async () => {
     const id = folderIdFromLink(folderInput.value);
     await selectWorkspace(connected.drive, id, connected.user.permissionId);
-    folderLink.querySelector('summary').focus();
   });
+  if (connected) (workspace ? refresh : folderInput).focus();
 });
-disconnect.addEventListener('click', () => action(async () => {
-  const wasSample = workspace?.isDemo;
-  if (connected) {
-    forgetDriveSession(connected.session);
-    revoke(connected.session.token);
-  }
-  connected = undefined;
-  clearWorkspace();
-  if (wasSample) {
-    navigate(pageUrl('library', false), true);
-    await restoreConnection();
-  }
-}));
+disconnect.addEventListener('click', async () => {
+  await action(async () => {
+    const wasSample = workspace?.isDemo;
+    if (connected) {
+      forgetDriveSession(connected.session);
+      revoke(connected.session.token);
+    }
+    connected = undefined;
+    clearWorkspace();
+    if (wasSample) {
+      navigate(pageUrl('library', false), true);
+      await restoreConnection();
+    }
+  });
+  if (workspace) refresh.focus();
+  else if (connected) folderButton.focus();
+  else (connect.hidden ? demoButton : connect).focus();
+});
 
 refresh.addEventListener('click', () => action(async () => {
   setText('workspace-status', '文献を読み込み、CSV を生成しています…');
