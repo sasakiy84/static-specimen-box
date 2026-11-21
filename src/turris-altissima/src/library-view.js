@@ -6,6 +6,8 @@ import { pageUrl, readRoute } from './routes.js';
 const names = { __proto__: null, article: '雑誌論文', inproceedings: '会議論文', conference: '会議論文', proceedings: '会議録', book: '書籍', inbook: '書籍の章', incollection: '論集所収', thesis: '学位論文', phdthesis: '博士論文', mastersthesis: '修士論文', online: 'オンライン資料', report: '報告書', misc: 'その他' };
 const byId = id => document.getElementById(id);
 const queryInput = byId('search'), tagInput = byId('tag-query'), yearSelect = byId('year'), typeSelect = byId('type'), sortSelect = byId('sort');
+const searchScope = byId('search-scope'), searchSubmit = byId('search-submit');
+const searchProgress = byId('search-progress'), searchError = byId('search-error');
 sortSelect.value = 'id-desc';
 const list = byId('list'), count = byId('count'), empty = byId('empty'), template = byId('entry-template');
 const clearFilters = byId('clear-filters');
@@ -13,6 +15,7 @@ const advancedToggle = byId('advanced-toggle'), advancedFilters = byId('advanced
 const suggestions = byId('tag-suggestions'), tagError = byId('tag-error'), panel = byId('detail-panel');
 const collator = new Intl.Collator('ja', { numeric: true, sensitivity: 'base' });
 let entries = [], catalog = [], entriesById = new Map(), searchIndex = new Map();
+let searchPdfs = null, pdfMatches = null, pdfRequest = null;
 let tagExpression = null, activeSuggestions = [], activeOption = -1, composing = false;
 let selectedEntry = null, returnFocus = null, activeTab = 'details';
 let referenceRequest = null;
@@ -31,6 +34,7 @@ function addLink(container, text, url, title) {
     if (title)
         link.title = title;
     container.append(link);
+    return link;
 }
 function fillLinks(container, entry) {
     container.replaceChildren();
@@ -99,21 +103,151 @@ function renderEntry(entry) {
     });
     return article;
 }
+function renderPdfHit({ file, entry }) {
+    const row = byId('pdf-hit-template').content.firstElementChild.cloneNode(true);
+    row.querySelector('.pdf-hit-name').textContent = file.name;
+    const link = addLink(row.querySelector('.entry-pdf'), 'PDF', file.url, file.name);
+    link?.setAttribute('aria-label', file.name + ' を開く');
+    if (entry) {
+        row.dataset.id = entry.id;
+        const detail = row.querySelector('.pdf-hit-entry');
+        detail.textContent = entry.title ? `${entry.id} · ${entry.title}` : entry.id;
+        detail.addEventListener('click', () => openDetails(entry, detail));
+        detail.hidden = false;
+    }
+    return row;
+}
+
+function matchesDetails(entry) {
+    return (!yearSelect.value || entry.year === yearSelect.value) &&
+        (!typeSelect.value || entry.entrytype === typeSelect.value) &&
+        LibraryCore.matchesTags(tagExpression, entry.tags || []);
+}
+
+function renderPdfMatches(filtered) {
+    const hits = pdfMatches.map(file => ({ file, entry: entriesById.get(file.entryId) }))
+        .filter(hit => !filtered || (hit.entry && matchesDetails(hit.entry)));
+    hits.sort((left, right) => {
+        if (left.entry && right.entry) {
+            const order = LibraryCore.compareEntries(left.entry, right.entry, sortSelect.value);
+            if (order) return order;
+        } else if (left.entry || right.entry) {
+            return left.entry ? -1 : 1;
+        }
+        return collator.compare(left.file.name, right.file.name);
+    });
+    return hits.map(renderPdfHit);
+}
+
 function render() {
-    const query = LibraryCore.normalize(queryInput.value.trim());
-    const found = entries.filter(entry => (!yearSelect.value || entry.year === yearSelect.value) && (!typeSelect.value || entry.entrytype === typeSelect.value) && (!query || searchIndex.get(entry.id).includes(query)) && LibraryCore.matchesTags(tagExpression, entry.tags || []));
-    found.sort((a, b) => LibraryCore.compareEntries(a, b, sortSelect.value));
-    list.replaceChildren(...found.map(renderEntry));
-    count.textContent = found.length + ' / ' + entries.length + ' 件';
-    empty.hidden = found.length > 0;
-    byId('empty-message').textContent = entries.length ? '一致する文献はありません。' : '文献はまだ登録されていません。';
-    clearFilters.hidden = !entries.length || found.length > 0;
-    byId('clear-tags').disabled = !tagInput.value;
     const filtered = Boolean(yearSelect.value || typeSelect.value || tagExpression);
+    const unavailable = Boolean(pdfRequest) || !searchError.hidden;
+    list.hidden = unavailable;
+    count.hidden = unavailable || (!entries.length && pdfMatches === null);
+    byId('library-sort').hidden = unavailable || !entries.length;
+    empty.hidden = true;
+    if (!unavailable) {
+        let cards;
+        if (pdfMatches) {
+            cards = renderPdfMatches(filtered);
+            count.textContent = filtered ? `PDF ${cards.length} / ${pdfMatches.length} 件` : `PDF ${cards.length} 件`;
+            byId('empty-message').textContent = '一致する PDF はありません。';
+            clearFilters.hidden = !filtered;
+        } else {
+            const query = searchScope.value === 'bibliography' ? LibraryCore.normalize(queryInput.value.trim()) : '';
+            const found = entries.filter(entry => matchesDetails(entry) && (!query || searchIndex.get(entry.id).includes(query)));
+            found.sort((a, b) => LibraryCore.compareEntries(a, b, sortSelect.value));
+            cards = found.map(renderEntry);
+            count.textContent = cards.length + ' / ' + entries.length + ' 件';
+            byId('empty-message').textContent = entries.length ? '一致する文献はありません。' : '文献はまだ登録されていません。';
+            clearFilters.hidden = !entries.length;
+        }
+        list.setAttribute('aria-label', pdfMatches ? 'PDF検索結果' : '文献一覧');
+        list.replaceChildren(...cards);
+        empty.hidden = cards.length > 0;
+    }
+    byId('clear-tags').disabled = !tagInput.value;
     advancedToggle.toggleAttribute('data-filtered', filtered);
     if (filtered) advancedToggle.setAttribute('aria-label', '詳細検索（絞り込み中）');
     else advancedToggle.removeAttribute('aria-label');
 }
+
+function showSearchMessage(node, message) {
+    node.textContent = message;
+    node.hidden = !message;
+}
+
+function resetPdfSearch() {
+    pdfRequest?.abort();
+    pdfRequest = pdfMatches = null;
+    searchSubmit.disabled = false;
+    showSearchMessage(searchProgress, '');
+    showSearchMessage(searchError, '');
+}
+
+function updateSearchScope() {
+    resetPdfSearch();
+    const pdf = searchScope.value === 'pdf';
+    searchSubmit.hidden = !pdf;
+    queryInput.placeholder = pdf ? 'PDF の本文・ファイル名' : 'タイトル・著者・メモ・DOI';
+    if (pdf) {
+        queryInput.maxLength = 240;
+        queryInput.title = '語は空白で区切ります。フレーズは半角の二重引用符で囲みます。';
+    } else {
+        queryInput.removeAttribute('maxlength');
+        queryInput.removeAttribute('title');
+    }
+}
+
+export function configurePdfSearch(search) {
+    searchPdfs = search;
+    searchScope.closest('.search-scope').hidden = !search;
+    searchScope.disabled = !search;
+    searchScope.value = search ? 'pdf' : 'bibliography';
+    queryInput.value = '';
+    updateSearchScope();
+}
+
+byId('keyword-search').addEventListener('submit', async event => {
+    event.preventDefault();
+    if (searchScope.value === 'bibliography') {
+        render();
+        return;
+    }
+    const query = queryInput.value.trim();
+    if (!query || !searchPdfs || pdfRequest) return;
+    if (query.length > queryInput.maxLength) {
+        pdfMatches = null;
+        showSearchMessage(searchError, `検索語は ${queryInput.maxLength} 文字以内で入力してください。`);
+        render();
+        return;
+    }
+    const request = new AbortController();
+    pdfRequest = request;
+    pdfMatches = null;
+    searchSubmit.disabled = true;
+    showSearchMessage(searchError, '');
+    showSearchMessage(searchProgress, 'Google Drive で PDF を検索しています…');
+    render();
+    try {
+        const files = await searchPdfs(query, request.signal);
+        if (pdfRequest === request) pdfMatches = files;
+    } catch (error) {
+        if (pdfRequest === request) showSearchMessage(searchError, error.message);
+    } finally {
+        if (pdfRequest === request) {
+            pdfRequest = null;
+            searchSubmit.disabled = false;
+            showSearchMessage(searchProgress, '');
+            render();
+        }
+    }
+});
+
+searchScope.addEventListener('change', () => {
+    updateSearchScope();
+    render();
+});
 function setAdvancedSearch(open) {
     advancedFilters.hidden = !open;
     advancedToggle.setAttribute('aria-expanded', String(open));
@@ -181,7 +315,12 @@ function showSuggestions() {
     highlightSuggestion(-1);
 }
 advancedToggle.addEventListener('click', () => setAdvancedSearch(advancedFilters.hidden));
-queryInput.addEventListener('input', render);
+queryInput.addEventListener('input', () => {
+    if (searchScope.value === 'bibliography' || pdfRequest || pdfMatches || !searchError.hidden) {
+        resetPdfSearch();
+        render();
+    }
+});
 [yearSelect, typeSelect, sortSelect].forEach(element => element.addEventListener('change', render));
 tagInput.addEventListener('input', () => {
     if (!composing) {
@@ -220,7 +359,8 @@ tagInput.addEventListener('keydown', event => {
 });
 byId('clear-tags').addEventListener('click', () => { tagInput.value = ''; applyTagQuery(); hideSuggestions(); tagInput.focus(); });
 clearFilters.addEventListener('click', () => {
-    queryInput.value = tagInput.value = yearSelect.value = typeSelect.value = '';
+    if (!pdfMatches) queryInput.value = '';
+    tagInput.value = yearSelect.value = typeSelect.value = '';
     applyTagQuery();
     hideSuggestions();
     queryInput.focus();
@@ -228,6 +368,7 @@ clearFilters.addEventListener('click', () => {
 queryInput.addEventListener('keydown', event => {
     if (event.key === 'Escape' && !event.isComposing) {
         queryInput.value = '';
+        resetPdfSearch();
         render();
     }
 });
@@ -258,7 +399,7 @@ function applyPanelRoute() {
     if (entry) {
         if (!panel.open || selectedEntry?.id !== id) {
             const card = [...list.children].find(node => node.dataset.id === id);
-            openDetails(entry, card?.querySelector('.entry-title'), true);
+            openDetails(entry, card?.querySelector('.entry-title, .pdf-hit-entry'), true);
         }
     } else {
         closeDetails(true);
@@ -607,7 +748,8 @@ export function setLibrary(next, { reset = false } = {}) {
     byId('recent-wrap').hidden = !recent.length;
     byId('schema-message').hidden = next?.schemaReady !== false;
     byId('library-content').hidden = !next;
-    byId('library-filters').hidden = byId('library-sort').hidden = count.hidden = !entries.length;
+    byId('library-filters').hidden = !entries.length && !searchPdfs;
+    advancedToggle.hidden = !entries.length;
     applyTagQuery();
     if (!next) return;
     const wasOpen = panel.open && !reset;

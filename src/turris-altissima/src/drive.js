@@ -73,7 +73,7 @@ export function createDrive(session, request = fetch) {
     return (await send(fileUrl(id, { fields: FIELDS }))).json();
   }
 
-  async function listFiles(query, fields, corpus = {}) {
+  async function listFiles(query, fields, corpus = {}, signal) {
     const files = [];
     const usedTokens = new Set();
     let pageToken;
@@ -87,7 +87,7 @@ export function createDrive(session, request = fetch) {
         ...corpus,
       });
       if (pageToken) params.set('pageToken', pageToken);
-      const response = await send(`${API}/drive/v3/files?${params}`);
+      const response = await send(`${API}/drive/v3/files?${params}`, { signal });
       const page = await response.json();
       if (page.incompleteSearch || !Array.isArray(page.files)) throw new Error('Drive ファイルの一覧をすべて取得できませんでした。');
       files.push(...page.files);
@@ -102,7 +102,7 @@ export function createDrive(session, request = fetch) {
     return listFiles(`'${validateFileId(parentId)}' in parents and trashed = false`, FIELDS);
   }
 
-  async function searchPdfs(folder, query) {
+  async function searchPdfs(folder, query, signal) {
     const terms = query.match(/"[^"]*"|[^\s"]+|"/g) ?? [];
     if (terms.includes('"')) throw new Error('フレーズを囲む引用符を閉じてください。');
     const keywords = terms.filter(term => term.replaceAll('"', '').trim());
@@ -111,7 +111,7 @@ export function createDrive(session, request = fetch) {
       `fullText contains '${term.replaceAll('\\', '\\\\').replaceAll("'", "\\'")}'`);
     const filesInFolder = `'${validateFileId(folder.id)}' in parents and trashed = false and mimeType = '${PDF_MIME}'`;
     const corpus = folder.driveId ? { corpora: 'drive', driveId: validateFileId(folder.driveId) } : {};
-    return listFiles([filesInFolder, ...predicates].join(' and '), 'id,name,mimeType,parents,trashed,webViewLink', corpus);
+    return listFiles([filesInFolder, ...predicates].join(' and '), 'id,name,mimeType,parents,trashed,webViewLink', corpus, signal);
   }
 
   async function read(id) {

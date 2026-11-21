@@ -311,9 +311,9 @@ export async function createWorkspace(drive, rootId, cache) {
     return (await listFiles(folder)).filter(file => isRegular(file) && extractId_(file.name) === id);
   }
 
-  async function searchOriginalPdfs(query) {
+  async function searchOriginalPdfs(query, signal) {
     const folder = await getFolder('Originals');
-    return (await drive.searchPdfs(folder, query))
+    return (await drive.searchPdfs(folder, query, signal))
       .filter(file => file.mimeType === PDF_MIME && childOf(file, folder))
       .map(file => ({ name: file.name, url: fileUrl(file), entryId: extractId_(file.name) }));
   }

@@ -1,3 +1,5 @@
 /bibliography-control /turris-altissima/ 301
 /bibliography-control/ /turris-altissima/ 301
 /bibliography-control/* /turris-altissima/:splat 301
+/turris-altissima/pdf-search /turris-altissima/ 301
+/turris-altissima/pdf-search/ /turris-altissima/ 301

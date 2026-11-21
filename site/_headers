@@ -32,6 +32,3 @@
 
 /turris-altissima/settings/
   Cache-Control: public, max-age=0, must-revalidate, no-transform
-
-/turris-altissima/pdf-search/
-  Cache-Control: public, max-age=0, must-revalidate, no-transform
