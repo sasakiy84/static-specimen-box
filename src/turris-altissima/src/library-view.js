@@ -553,25 +553,19 @@ function renderDetailCopies(entry) {
         ['文献 ID', entry.id],
     ]) {
         if (!text) continue;
-        const row = document.createElement('div');
-        row.className = 'detail-copy-row';
-        row.setAttribute('role', 'group');
+        const row = byId('detail-copy-row-template').content.firstElementChild.cloneNode(true);
         row.setAttribute('aria-label', label);
-        const value = document.createElement('span');
-        value.className = 'detail-copy-label';
-        value.textContent = text;
-        const buttons = document.createElement('div');
-        buttons.className = 'copy-actions';
-        for (const [name, operation] of [['コピー', () => copyText(text)], ['リンク付きコピー', () => copyEntryLink(text, url)]]) {
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.className = 'action-button';
-            button.textContent = name;
-            button.setAttribute('aria-label', label + 'を' + name);
+        row.querySelector('.detail-copy-label').textContent = text;
+        for (const [selector, name, operation] of [
+            ['.copy-detail-text', 'コピー', () => copyText(text)],
+            ['.copy-detail-link', 'リンク付きコピー', () => copyEntryLink(text, url)],
+        ]) {
+            const button = row.querySelector(selector);
+            const description = label + 'を' + name;
+            button.setAttribute('aria-label', description);
+            button.title = description;
             button.addEventListener('click', () => copyAction(button, status, operation));
-            buttons.append(button);
         }
-        row.append(value, buttons);
         rows.push(row);
     }
     byId('detail-copy').replaceChildren(...rows);
