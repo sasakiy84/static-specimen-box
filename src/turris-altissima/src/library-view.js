@@ -75,21 +75,21 @@ function renderEntry(entry) {
     article.dataset.id = entry.id;
     article.querySelector('.entry-id').textContent = entry.id;
     article.querySelector('.entry-year').textContent = entry.year || '年不明';
-    article.querySelector('.entry-citekey').textContent = entry.citekey ? '@' + entry.citekey : '';
     article.querySelector('.entry-type').textContent = names[entry.entrytype] || entry.entrytype || '種別不明';
     const title = article.querySelector('.entry-title');
     title.textContent = entry.title || '（タイトル未設定）';
     title.addEventListener('click', () => openDetails(entry, title));
-    const author = article.querySelector('.authors');
+    const author = article.querySelector('.entry-authors');
     author.textContent = authorText(entry.bib_fields?.author || entry.bib_fields?.editor || entry.author);
     author.hidden = !author.textContent;
-    const publication = article.querySelector('.publication');
-    publication.textContent = [entry.publication, entry.volume && 'Vol. ' + entry.volume, entry.number && 'No. ' + entry.number, entry.pages].filter(Boolean).join(' · ');
-    publication.hidden = !publication.textContent;
+    author.title = author.textContent;
     const tags = article.querySelector('.entry-tags');
     (entry.tags || []).forEach(tag => tags.append(tagButton(tag)));
-    tags.hidden = !entry.tags?.length;
-    fillLinks(article.querySelector('.links'), entry);
+    tags.hidden = !tags.childElementCount;
+    const links = article.querySelector('.links');
+    fillLinks(links, entry);
+    links.hidden = !links.childElementCount;
+    article.querySelector('.entry-tools').hidden = tags.hidden && links.hidden;
     article.addEventListener('click', event => {
         if (event.target.closest('a,button,input,select,textarea') || window.getSelection()?.toString())
             return;
