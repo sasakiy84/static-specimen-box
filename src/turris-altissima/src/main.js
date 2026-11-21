@@ -14,6 +14,9 @@ import { discardDraft } from '../formatter/src/draft.ts';
 
 const byId = id => document.getElementById(id);
 const connect = byId('connect-drive');
+const settingsConnect = byId('settings-connect');
+const setupFolder = byId('setup-folder');
+const openSettings = byId('open-settings');
 const disconnect = byId('disconnect-drive');
 const folderButton = byId('choose-folder');
 const folderLink = byId('folder-link');
@@ -69,17 +72,26 @@ function updateButtons() {
     : !sample && !authReady && !connected ? 'Google Drive 接続を準備しています…' : '';
   setText('connection-progress', progress);
   setText('formatter-connection-progress', workspace ? '' : progress);
+  setText('settings-connection-progress', progress || (sample
+    ? 'サンプル表示中です。'
+    : !googleEnabled ? 'Google Drive 接続は static-specimen-box.sasakiy84.net で利用できます。' : ''));
   byId('formatter-unavailable').hidden = Boolean(workspace || progress || sample);
   byId('formatter-connection-help').textContent = driveReady
-    ? '文献一覧で、接続する文献フォルダを選択してください。'
-    : '文献一覧で Google Drive に接続し、文献フォルダを選択してください。';
-  connect.hidden = !googleEnabled || sample || restoringSession || !authReady || Boolean(connected);
-  connect.disabled = isBusy;
+    ? '設定で文献フォルダを選んでください。'
+    : '設定で Google Drive に接続し、文献フォルダを設定してください。';
+  connect.hidden = settingsConnect.hidden = !googleEnabled || sample || Boolean(progress || connected);
+  connect.disabled = settingsConnect.disabled = isBusy;
   byId('connection-setup').hidden = Boolean(workspace);
-  folderButton.hidden = folderLink.hidden = !driveReady || Boolean(workspace);
+  setupFolder.hidden = !driveReady || Boolean(workspace);
+  setupFolder.setAttribute('aria-disabled', String(isBusy));
+  openSettings.hidden = !driveReady;
+  openSettings.setAttribute('aria-disabled', String(isBusy));
+  byId('settings-folder-controls').hidden = !driveReady;
+  byId('settings-folder-empty').hidden = Boolean(workspace);
+  folderButton.textContent = workspace ? '文献フォルダを変更' : '文献フォルダを選択';
   folderInput.disabled = isBusy;
   byId('open-folder-link').disabled = isBusy;
-  demoButton.hidden = sample || Boolean(connected);
+  demoButton.hidden = sample || Boolean(progress || connected);
   demoButton.setAttribute('aria-disabled', String(isBusy));
   byId('workspace-header').hidden = !(driveReady || workspace);
   disconnect.textContent = workspace?.isDemo ? 'サンプルを閉じる' : 'ログアウト';
@@ -125,7 +137,16 @@ function clearWorkspace({ reset = true } = {}) {
   setCatalog(null, reset && hadWorkspace);
   setWorkspaceFolder();
   setText('workspace-status', '');
+  setText('settings-status', '');
+  setText('settings-error', '');
   updateButtons();
+}
+
+function connectionErrorTarget() {
+  const { page } = readRoute();
+  if (page === 'settings') return 'settings-error';
+  if (page === 'new') return 'formatter-message';
+  return 'workspace-error';
 }
 
 async function action(operation, errorTarget = 'workspace-error') {
@@ -164,23 +185,25 @@ function resetFolderLink() {
 }
 
 function setWorkspaceFolder(root) {
-  const link = byId('workspace-folder');
-  link.hidden = !root;
-  link.textContent = root?.name || '';
-  if (root) link.href = 'https://drive.google.com/drive/folders/' + encodeURIComponent(root.id);
-  else link.removeAttribute('href');
+  for (const link of [byId('workspace-folder'), byId('settings-folder')]) {
+    link.hidden = !root;
+    link.textContent = root?.name || '';
+    if (root) link.href = 'https://drive.google.com/drive/folders/' + encodeURIComponent(root.id);
+    else link.removeAttribute('href');
+  }
 }
 
 async function selectWorkspace(drive, id, userId, isDemo = false) {
   const cache = isDemo ? undefined : browserCatalogCache(scopeKey(userId, id));
   const next = await createWorkspace(drive, id, cache);
   let nextCatalog;
+  let catalogError = '';
   try {
     nextCatalog = isDemo ? await next.rebuild() : await next.readCatalog();
   } catch (error) {
     if (isDemo || (error instanceof DriveError && error.status === 401)) throw error;
     nextCatalog = { entries: [], schemaReady: true, modifiedAt: '' };
-    setText('workspace-error', `一覧を読み込めませんでした。設定を確認して「一覧・CSV を更新」をお試しください。 ${error.message}`);
+    catalogError = `一覧を読み込めませんでした。設定を確認して「一覧・CSV を更新」をお試しください。 ${error.message}`;
   }
   const reset = Boolean(workspace) && (next.root.id !== workspace.service.root.id || userId !== workspace.userId);
   workspace = { service: next, userId, isDemo };
@@ -188,6 +211,8 @@ async function selectWorkspace(drive, id, userId, isDemo = false) {
   dirty = false;
   setWorkspaceFolder(isDemo ? null : next.root);
   setCatalog(nextCatalog, reset);
+  setText('workspace-error', catalogError);
+  if (readRoute().page === 'settings') setText('settings-error', catalogError);
   setText('workspace-status', nextCatalog.modifiedAt ? '' : '「一覧・CSV を更新」で文献一覧を生成できます。');
   resetFolderLink();
   if (!isDemo) rememberFolder(userId, next.root.id);
@@ -204,7 +229,6 @@ async function connectWith(session, remember = false) {
   connected = { session, drive, user };
   if (remember) saveDriveSession(session);
   if (sample) navigate(pageUrl('library', false), true);
-  setText('workspace-status', '文献管理フォルダを選択してください。');
   const previous = loadRememberedFolder(user.permissionId);
   if (previous) await selectWorkspace(drive, previous, user.permissionId);
 }
@@ -227,39 +251,57 @@ async function restoreConnection() {
 }
 
 async function readyIdentity() {
-  await action(restoreConnection, readRoute().page === 'new' ? 'formatter-message' : 'workspace-error');
+  await action(restoreConnection, connectionErrorTarget());
   try {
     await loadIdentity();
   } catch (error) {
-    if (!connected) setText('workspace-error', error.message);
+    if (!connected) setText(connectionErrorTarget(), error.message);
   } finally {
     authReady = true;
     updateButtons();
   }
 }
 
-connect.addEventListener('click', async () => {
-  await action(async () => {
-    if (!globalThis.google?.accounts?.oauth2) await loadIdentity();
-    await connectWith(await authorize(), true);
+for (const button of [connect, settingsConnect]) {
+  button.addEventListener('click', async () => {
+    await action(async () => {
+      if (!globalThis.google?.accounts?.oauth2) await loadIdentity();
+      await connectWith(await authorize(), true);
+    }, connectionErrorTarget());
+    if (connected) {
+      if (readRoute().page === 'settings') folderButton.focus();
+      else (workspace ? refresh : setupFolder).focus();
+    }
   });
-  if (connected) (workspace ? refresh : folderButton).focus();
-});
-folderButton.addEventListener('click', async () => {
-  await action(async () => {
-    const id = await pickFolder(getAccessToken(connected.session));
-    if (id) await selectWorkspace(connected.drive, id, connected.user.permissionId);
-  });
-  if (connected) (workspace ? refresh : folderButton).focus();
-});
-folderForm.addEventListener('submit', async event => {
-  event.preventDefault();
+}
+
+async function chooseWorkspace(getFolderId) {
   if (!connected) return;
   await action(async () => {
-    const id = folderIdFromLink(folderInput.value);
-    await selectWorkspace(connected.drive, id, connected.user.permissionId);
-  });
-  if (connected) (workspace ? refresh : folderInput).focus();
+    setText('settings-status', '');
+    const id = await getFolderId();
+    if (!id) return;
+    setText('settings-status', 'フォルダを確認しています…');
+    try {
+      await selectWorkspace(connected.drive, id, connected.user.permissionId);
+      setText('settings-status', '文献フォルダを設定しました。');
+    } catch (error) {
+      setText('settings-status', '');
+      throw error;
+    }
+  }, 'settings-error');
+  if (readRoute().page === 'settings') {
+    if (connected) (folderLink.open ? folderInput : folderButton).focus();
+    else settingsConnect.focus();
+  }
+}
+
+folderButton.addEventListener('click', () => {
+  void chooseWorkspace(() => pickFolder(getAccessToken(connected.session)));
+});
+folderForm.addEventListener('submit', event => {
+  event.preventDefault();
+  void chooseWorkspace(() => folderIdFromLink(folderInput.value));
 });
 disconnect.addEventListener('click', async () => {
   await action(async () => {
@@ -276,7 +318,7 @@ disconnect.addEventListener('click', async () => {
     }
   });
   if (workspace) refresh.focus();
-  else if (connected) folderButton.focus();
+  else if (connected) setupFolder.focus();
   else (connect.hidden ? demoButton : connect).focus();
 });
 
@@ -420,14 +462,14 @@ async function renderPage(focus = false) {
   if (route.page === 'prompt') preparePrompt();
   if (!route.sample && workspace?.isDemo) {
     clearWorkspace();
-    await action(restoreConnection);
+    await action(restoreConnection, connectionErrorTarget());
   }
 
   if (route.sample && !workspace?.isDemo) {
     await action(async () => {
       connected = undefined;
       await selectWorkspace(demoDrive(), 'demo-root', 'demo', true);
-    }, route.page === 'new' ? 'formatter-message' : 'workspace-error');
+    }, connectionErrorTarget());
   }
   if (readRoute().page === 'new') prepareFormatter();
 }

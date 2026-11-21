@@ -7,8 +7,8 @@
   <link rel="icon" href="../assets/brand/favicon.ico" sizes="16x16 32x32 48x48">
   <link rel="apple-touch-icon" href="../assets/brand/apple-touch-icon.png" sizes="180x180">
   <title>LLM 用プロンプト | turris-altissima</title>
-  <script type="module" crossorigin src="../assets/index-Bxh1Qe5t.js"></script>
-  <link rel="stylesheet" crossorigin href="../assets/index-Ng5RHGi5.css">
+  <script type="module" crossorigin src="../assets/index-Pot_2krM.js"></script>
+  <link rel="stylesheet" crossorigin href="../assets/index-Bm_jrorZ.css">
 </head>
 <body>
   <main class="page" id="main" data-page="library" hidden>
@@ -30,6 +30,12 @@
               <path d="M12 5v14M5 12h14"/>
             </svg>
           </a>
+          <a id="open-settings" class="action-button icon-button" data-route="settings" href="./settings/" aria-label="設定" title="設定" hidden>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M10 3h4l.6 2.4 1.5.9 2.4-.7 2 3.5-1.8 1.7v1.9l1.8 1.7-2 3.5-2.4-.7-1.5.9L14 21h-4l-.6-2.9-1.5-.9-2.4.7-2-3.5 1.8-1.7v-1.9L3.5 9.1l2-3.5 2.4.7 1.5-.9L10 3Z"/>
+              <circle cx="12" cy="12" r="2.7"/>
+            </svg>
+          </a>
           <button id="disconnect-drive" type="button" class="action-button">ログアウト</button>
         </div>
         <p class="workspace-identity">
@@ -41,19 +47,9 @@
     <section id="connection-setup" class="connection" aria-label="Google Drive 接続">
       <div class="connection-actions">
         <button id="connect-drive" type="button" class="action-button primary-action" hidden>Google Drive に接続</button>
-        <button id="choose-folder" type="button" class="action-button primary-action" hidden>文献フォルダを選択</button>
-        <a id="open-demo" class="text-button" data-route="library" data-sample="true" href="?sample=1">サンプルを見る</a>
+        <a id="setup-folder" class="action-button primary-action" data-route="settings" href="./settings/" hidden>文献フォルダを設定</a>
+        <a id="open-demo" class="text-button" data-route="library" data-sample="true" href="?sample=1" hidden>サンプルを見る</a>
       </div>
-      <details id="folder-link" class="folder-link" hidden>
-        <summary>フォルダのリンクを入力</summary>
-        <form id="folder-link-form">
-          <label for="folder-link-input">Google Drive のフォルダのリンク</label>
-          <div class="folder-link-fields">
-            <input id="folder-link-input" type="text" placeholder="https://drive.google.com/drive/folders/…" autocomplete="off" spellcheck="false" required>
-            <button id="open-folder-link" type="submit" class="action-button">このフォルダを開く</button>
-          </div>
-        </form>
-      </details>
       <p id="connection-progress" class="connection-progress" role="status">読み込み中…</p>
     </section>
     <p id="workspace-status" class="workspace-notice" role="status" hidden></p>
@@ -210,9 +206,9 @@
       <p id="formatter-message" role="status" class="editor-message" hidden></p>
     </header>
     <section id="formatter-unavailable" class="editor-card" hidden>
-      <p id="formatter-connection-help">文献一覧で Google Drive に接続し、文献フォルダを選択してください。</p>
+      <p id="formatter-connection-help">設定で Google Drive に接続し、文献フォルダを設定してください。</p>
       <div class="editor-actions">
-        <a class="action-button primary-action" data-route="library" href="../">文献一覧を開く</a>
+        <a class="action-button primary-action" data-route="settings" href="../settings/">設定を開く</a>
         <a class="action-button" data-route="new" data-sample="true" href="?sample=1">サンプルで試す</a>
       </div>
     </section>
@@ -235,6 +231,40 @@
         <p id="prompt-status" role="status" class="copy-status" hidden></p>
       </div>
       <pre id="llm-prompt" tabindex="0" aria-label="LLM 用プロンプト本文"></pre>
+    </section>
+  </main>
+  <main id="settings-page" class="page settings-page" data-page="settings" hidden>
+    <header class="editor-page-header">
+      <nav class="editor-page-links" aria-label="ナビゲーション">
+        <a class="editor-home" data-route="library" href="../">
+          <img src="../assets/brand/mark.png" width="23" height="23" alt="">文献一覧に戻る
+        </a>
+      </nav>
+      <h1 tabindex="-1" data-page-heading>設定</h1>
+    </header>
+    <section class="editor-card settings-section" aria-labelledby="settings-heading">
+      <h2 id="settings-heading">文献フォルダ</h2>
+      <p id="settings-connection-progress" class="connection-progress" role="status">読み込み中…</p>
+      <button id="settings-connect" type="button" class="action-button primary-action" hidden>Google Drive に接続</button>
+      <div id="settings-folder-controls" hidden>
+        <p class="settings-folder">
+          <span id="settings-folder-empty">フォルダは未設定です。</span>
+          <a id="settings-folder" target="_blank" rel="noopener noreferrer" title="Google Drive で文献フォルダを開く" hidden></a>
+        </p>
+        <button id="choose-folder" type="button" class="action-button primary-action">文献フォルダを選択</button>
+        <details id="folder-link" class="folder-link">
+          <summary>フォルダのリンクを入力</summary>
+          <form id="folder-link-form">
+            <label for="folder-link-input">Google Drive のフォルダのリンクまたは ID</label>
+            <div class="folder-link-fields">
+              <input id="folder-link-input" type="text" autocomplete="off" spellcheck="false" required>
+              <button id="open-folder-link" type="submit" class="action-button">このフォルダを使う</button>
+            </div>
+          </form>
+        </details>
+      </div>
+      <p id="settings-status" class="connection-progress" role="status" hidden></p>
+      <p id="settings-error" class="field-error" role="alert" hidden></p>
     </section>
   </main>
 </body>

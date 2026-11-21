@@ -4,7 +4,7 @@ export const appRoot = new URL('../', new URL(import.meta.url));
 export function readRoute(url = new URL(location.href)) {
   const path = url.pathname.slice(appRoot.pathname.length).replace(/\/$/, '');
   return {
-    page: path === 'new' || path === 'prompt' ? path : 'library',
+    page: path === 'new' || path === 'prompt' || path === 'settings' ? path : 'library',
     sample: url.searchParams.get('sample') === '1',
   };
 }

@@ -722,7 +722,12 @@ body.panel-open .toolbar {
 }
 .connection-actions, .edit-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .connection-progress { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
-.connection-actions .text-button[aria-disabled="true"] { opacity: .65; cursor: default; }
+.connection-actions [aria-disabled="true"] { opacity: .65; cursor: default; }
+.settings-page { max-width: 760px; }
+.settings-section { padding-top: 16px; border-top: 1px solid var(--border); }
+.settings-section .action-button { min-height: 44px; }
+.settings-folder { margin: 8px 0 14px; overflow-wrap: anywhere; }
+#settings-connect { margin-top: 12px; }
 .folder-link { margin-top: 10px; }
 .folder-link summary { width: fit-content; cursor: pointer; font-size: 13px; color: var(--accent); }
 .folder-link form { margin-top: 8px; }
