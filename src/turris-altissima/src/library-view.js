@@ -15,7 +15,7 @@ const collator = new Intl.Collator('ja', { numeric: true, sensitivity: 'base' })
 let entries = [], catalog = [], entriesById = new Map(), searchIndex = new Map();
 let tagExpression = null, activeSuggestions = [], activeOption = -1, composing = false;
 let selectedEntry = null, returnFocus = null, activeTab = 'details';
-let referenceEntry = null;
+let referenceRequest = null;
 let detailSlot = history.state?.libraryDetailSlot === true;
 const modalPanel = window.matchMedia('(max-width: 960px)');
 function addLink(container, text, url, title) {
@@ -306,12 +306,13 @@ function openDetails(entry, trigger, fromHistory = false) {
     }
     document.querySelector('.panel-scroll').scrollTop = 0;
     byId('close-panel').focus();
+    void renderReferences();
 }
 function switchTab(tab, focus = false) {
     activeTab = tab;
     ['details', 'bib', 'references'].forEach(name => { const selected = name === tab; byId('tab-' + name).setAttribute('aria-selected', String(selected)); byId('tab-' + name).tabIndex = selected ? 0 : -1; byId('pane-' + name).hidden = !selected; });
     if (tab === 'references')
-        renderReferences();
+        void renderReferences();
     if (focus)
         byId('tab-' + tab).focus();
 }
@@ -408,22 +409,30 @@ function safeReference(html) {
 }
 /** 書式ごとに結果とコピー操作を分け、1書式の失敗で他の結果を消さない。 */
 async function renderReferences() {
-    if (referenceEntry === selectedEntry) return;
-    if (!selectedEntry) return;
     const entry = selectedEntry;
-    referenceEntry = entry;
+    if (!entry || referenceRequest?.entry === entry) return;
+    const request = { entry };
+    referenceRequest = request;
     const container = byId('citation-list');
     container.textContent = '参考文献を準備しています…';
     try {
         await citationAssets();
     } catch (error) {
-        if (selectedEntry === entry) {
-            container.textContent = error.message;
-            referenceEntry = null;
+        if (referenceRequest === request) {
+            referenceRequest = null;
+            if (panel.open && selectedEntry === entry) container.textContent = error.message;
         }
         return;
     }
-    if (selectedEntry !== entry) return;
+    if (activeTab !== 'references') {
+        // 詳細の初回描画を先に済ませてから整形する。
+        await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+    }
+    if (referenceRequest !== request) return;
+    if (!panel.open || selectedEntry !== entry) {
+        referenceRequest = null;
+        return;
+    }
     container.replaceChildren();
     for (const style of ReferenceFormats.styles) {
         const card = byId('citation-template').content.firstElementChild.cloneNode(true);
@@ -447,16 +456,16 @@ async function renderReferences() {
             const output = ReferenceFormats.render(entry, style.id);
             result.append(safeReference(output.html));
             const citationHtml = result.innerHTML;
-            const citationText = result.innerText.trim();
             const missing = card.querySelector('.citation-missing');
             missing.hidden = !output.missing.length;
             missing.textContent = '未入力：' + output.missing.join('、');
             const notice = card.querySelector('.citation-notice');
             notice.hidden = !output.notices.length;
             notice.textContent = output.notices.join(' ');
-            textButton.disabled = richButton.disabled = !citationText;
-            textButton.addEventListener('click', () => copyAction(textButton, status, () => copyText(citationText)));
+            textButton.disabled = richButton.disabled = !result.textContent.trim();
+            textButton.addEventListener('click', () => copyAction(textButton, status, () => copyText(result.innerText.trim())));
             richButton.addEventListener('click', () => copyAction(richButton, status, async () => {
+                const citationText = result.innerText.trim();
                 if (window.ClipboardItem && navigator.clipboard?.write) {
                     try {
                         await navigator.clipboard.write([new ClipboardItem({
@@ -594,7 +603,7 @@ export function setLibrary(next, { reset = false } = {}) {
     }
     entries = next?.entries ?? [];
     selectedEntry = null;
-    referenceEntry = null;
+    referenceRequest = null;
     catalog = LibraryCore.tagCatalog(entries).sort((a, b) => collator.compare(a.tag, b.tag));
     entriesById = new Map(entries.map(entry => [entry.id, entry]));
     searchIndex = new Map(entries.map(entry => [entry.id, [
