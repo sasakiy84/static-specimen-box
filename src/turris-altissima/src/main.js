@@ -1,6 +1,7 @@
 import './library.css';
 import '../formatter/formatter.css';
 import { setLibrary, syncLibraryRoute } from './library-view.js';
+import { LibraryCore } from './library-core.js';
 import { googleConfig } from './google-config.js';
 import { authorize, loadIdentity, pickFolder, revoke } from './google-auth.js';
 import { createDrive, DriveError, folderIdFromLink, getAccessToken } from './drive.js';
@@ -36,6 +37,9 @@ const upload = byId('attachment-file');
 const editDialog = byId('edit-dialog');
 const formatterPage = byId('formatter-page');
 const formatterRoot = byId('formatter-root');
+const pdfSearchForm = byId('pdf-search-form');
+const pdfSearchQuery = byId('pdf-search-query');
+const pdfSearchResults = byId('pdf-search-results');
 const routeLinks = [...document.querySelectorAll('a[data-route]')];
 const libraryTitle = document.querySelector('[data-page="library"] [data-page-heading]').textContent;
 const editSource = byId('edit-source');
@@ -75,6 +79,12 @@ function updateButtons() {
     : !sample && !authReady && !connected ? 'Google Drive 接続を準備しています…' : '';
   setText('connection-progress', progress);
   setText('formatter-connection-progress', workspace ? '' : progress);
+  const pdfSearchReady = Boolean(workspace && !workspace.isDemo && !sample);
+  setText('pdf-search-progress', pdfSearchReady ? '' : progress);
+  pdfSearchForm.hidden = !pdfSearchReady;
+  byId('pdf-search-unavailable').hidden = Boolean(pdfSearchReady || progress);
+  pdfSearchQuery.readOnly = isBusy;
+  byId('pdf-search-submit').disabled = isBusy;
   setText('settings-connection-progress', progress || (sample
     ? 'サンプル表示中です。'
     : !googleEnabled ? 'Google Drive 接続は static-specimen-box.sasakiy84.net で利用できます。' : ''));
@@ -151,6 +161,7 @@ function clearWorkspace({ reset = true } = {}) {
   editDialog.close();
   resetFormatter();
   resetFolderLink();
+  resetPdfSearch();
   setCatalog(null, reset && hadWorkspace);
   setWorkspaceFolder();
   setText('workspace-status', '');
@@ -163,6 +174,7 @@ function connectionErrorTarget() {
   const { page } = readRoute();
   if (page === 'settings') return 'settings-error';
   if (page === 'new') return 'formatter-message';
+  if (page === 'pdf-search') return 'pdf-search-error';
   return 'workspace-error';
 }
 
@@ -223,6 +235,7 @@ async function selectWorkspace(drive, id, userId, isDemo = false) {
     catalogError = `一覧を読み込めませんでした。設定を確認して「一覧・CSV を更新」をお試しください。 ${error.message}`;
   }
   const reset = Boolean(workspace) && (next.root.id !== workspace.service.root.id || userId !== workspace.userId);
+  if (reset) resetPdfSearch();
   workspace = { service: next, userId, isDemo };
   currentEntry = undefined;
   dirty = false;
@@ -368,6 +381,56 @@ refresh.addEventListener('click', () => action(async () => {
   }
 }));
 
+function resetPdfSearch() {
+  pdfSearchForm.reset();
+  pdfSearchResults.replaceChildren();
+  pdfSearchResults.hidden = true;
+  setText('pdf-search-status', '');
+  setText('pdf-search-error', '');
+}
+
+pdfSearchForm.addEventListener('submit', event => {
+  event.preventDefault();
+  const context = workspace;
+  if (!context || context.isDemo || readRoute().page !== 'pdf-search') return;
+  const query = pdfSearchQuery.value.trim();
+  void action(async () => {
+    pdfSearchResults.replaceChildren();
+    pdfSearchResults.hidden = true;
+    setText('pdf-search-status', 'Google Drive で検索しています…');
+    try {
+      const files = await context.service.searchOriginalPdfs(query);
+      if (workspace !== context) return;
+      const entries = new Map((catalog?.entries ?? []).map(entry => [entry.id, entry]));
+      const template = byId('pdf-hit-template');
+      for (const file of files) {
+        const row = template.content.firstElementChild.cloneNode(true);
+        row.querySelector('.pdf-hit-name').textContent = file.name;
+        const openPdf = row.querySelector('.action');
+        const href = LibraryCore.safeUrl(file.url);
+        if (href) openPdf.href = href;
+        else openPdf.hidden = true;
+        openPdf.setAttribute('aria-label', file.name + ' を開く');
+        const entry = entries.get(file.entryId);
+        if (entry) {
+          const detail = row.querySelector('.pdf-hit-entry');
+          const url = pageUrl('library', false);
+          url.searchParams.set('entry', entry.id);
+          detail.href = url;
+          detail.textContent = entry.title ? `${entry.id} · ${entry.title}` : entry.id;
+          detail.hidden = false;
+        }
+        pdfSearchResults.append(row);
+      }
+      pdfSearchResults.hidden = !files.length;
+      setText('pdf-search-status', files.length ? `「${query}」の検索結果 ${files.length} 件` : '一致する PDF はありません。');
+    } catch (error) {
+      setText('pdf-search-status', '');
+      throw error;
+    }
+  }, 'pdf-search-error');
+});
+
 function afterWrite(message) {
   dirty = true;
   setText('workspace-status', '原本に変更があります。「一覧・CSV を更新」で一覧に反映できます。');
@@ -481,7 +544,8 @@ async function renderPage(focus = false) {
   const pages = document.querySelectorAll('main[data-page]');
   for (const page of pages) page.hidden = page.dataset.page !== route.page;
   for (const link of routeLinks) {
-    link.href = pageUrl(link.dataset.route, link.dataset.sample === 'true' || route.sample);
+    const sample = link.dataset.sample === undefined ? route.sample : link.dataset.sample === 'true';
+    link.href = pageUrl(link.dataset.route, sample);
   }
   syncLibraryRoute();
   updateButtons();

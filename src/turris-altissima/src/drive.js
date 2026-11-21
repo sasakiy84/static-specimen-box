@@ -1,6 +1,7 @@
 const API = 'https://www.googleapis.com';
-const FIELDS = 'id,name,mimeType,parents,trashed,modifiedTime,version,size,webViewLink,capabilities(canEdit,canAddChildren,canDownload)';
+const FIELDS = 'id,name,mimeType,parents,trashed,modifiedTime,version,size,webViewLink,driveId,capabilities(canEdit,canAddChildren,canDownload)';
 export const FOLDER_MIME = 'application/vnd.google-apps.folder';
+export const PDF_MIME = 'application/pdf';
 
 export class DriveError extends Error {
   constructor(status, message) {
@@ -72,17 +73,18 @@ export function createDrive(session, request = fetch) {
     return (await send(fileUrl(id, { fields: FIELDS }))).json();
   }
 
-  async function list(parentId) {
+  async function listFiles(query, fields, corpus = {}) {
     const files = [];
     const usedTokens = new Set();
     let pageToken;
     do {
       const params = new URLSearchParams({
-        q: `'${validateFileId(parentId)}' in parents and trashed = false`,
-        fields: `nextPageToken,incompleteSearch,files(${FIELDS})`,
+        q: query,
+        fields: `nextPageToken,incompleteSearch,files(${fields})`,
         pageSize: '1000',
         supportsAllDrives: 'true',
         includeItemsFromAllDrives: 'true',
+        ...corpus,
       });
       if (pageToken) params.set('pageToken', pageToken);
       const response = await send(`${API}/drive/v3/files?${params}`);
@@ -94,6 +96,22 @@ export function createDrive(session, request = fetch) {
       usedTokens.add(pageToken);
     } while (pageToken);
     return files;
+  }
+
+  function list(parentId) {
+    return listFiles(`'${validateFileId(parentId)}' in parents and trashed = false`, FIELDS);
+  }
+
+  async function searchPdfs(folder, query) {
+    const terms = query.match(/"[^"]*"|[^\s"]+|"/g) ?? [];
+    if (terms.includes('"')) throw new Error('フレーズを囲む引用符を閉じてください。');
+    const keywords = terms.filter(term => term.replaceAll('"', '').trim());
+    if (!keywords.length) throw new Error('検索語を入力してください。');
+    const predicates = keywords.map(term =>
+      `fullText contains '${term.replaceAll('\\', '\\\\').replaceAll("'", "\\'")}'`);
+    const filesInFolder = `'${validateFileId(folder.id)}' in parents and trashed = false and mimeType = '${PDF_MIME}'`;
+    const corpus = folder.driveId ? { corpora: 'drive', driveId: validateFileId(folder.driveId) } : {};
+    return listFiles([filesInFolder, ...predicates].join(' and '), 'id,name,mimeType,parents,trashed,webViewLink', corpus);
   }
 
   async function read(id) {
@@ -138,5 +156,5 @@ export function createDrive(session, request = fetch) {
     })).json();
   }
 
-  return { who, get, list, read, update, create };
+  return { who, get, list, searchPdfs, read, update, create };
 }

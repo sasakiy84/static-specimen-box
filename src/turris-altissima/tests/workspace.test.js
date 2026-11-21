@@ -86,6 +86,25 @@ test('checks the file belongs to the active root before reading or writing', asy
   assert.equal(await drive.read(file.id), '@misc{New, title={Title}}');
 });
 
+test('keeps only matching PDFs in Originals and returns direct links without reading PDF bytes', async () => {
+  const drive = demoDrive();
+  const attached = await drive.create('Originals', 'MA0001_example.pdf', '', 'application/pdf');
+  const unattached = await drive.create('Originals', 'unregistered.pdf', '', 'application/pdf');
+  const misplaced = await drive.create('Notes', 'MA0002_example.pdf', '', 'application/pdf');
+  const otherType = await drive.create('Originals', 'example.txt', '', 'text/plain');
+  drive.searchPdfs = async (folder, query) => {
+    assert.equal(folder.id, 'Originals');
+    assert.equal(query, 'text in the PDF');
+    return [attached, unattached, misplaced, otherType, { ...attached, trashed: true }];
+  };
+  drive.read = () => assert.fail('PDF body was downloaded');
+  const workspace = await createWorkspace(drive, 'demo-root');
+  assert.deepEqual(await workspace.searchOriginalPdfs('text in the PDF'), [
+    { name: attached.name, url: 'https://drive.google.com/open?id=' + attached.id, entryId: 'MA0001' },
+    { name: unattached.name, url: 'https://drive.google.com/open?id=' + unattached.id, entryId: '' },
+  ]);
+});
+
 test('leaves the CSV untouched when an input changes during generation', async () => {
   const drive = demoDrive();
   const workspace = await createWorkspace(drive, 'demo-root');

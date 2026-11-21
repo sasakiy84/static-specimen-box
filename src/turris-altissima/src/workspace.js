@@ -1,4 +1,4 @@
-import { FOLDER_MIME, validateFileId } from './drive.js';
+import { FOLDER_MIME, PDF_MIME, validateFileId } from './drive.js';
 import { buildCatalogEntries_, serializeEntries_, extractId_, parseCatalogRows_, calculateMaState_, catalogRevision } from './catalog.js';
 
 const directories = ['Bibs', 'Originals', 'Notes', 'Scripts'];
@@ -280,6 +280,13 @@ export async function createWorkspace(drive, rootId, cache) {
     return (await listFiles(folder)).filter(file => isRegular(file) && extractId_(file.name) === id);
   }
 
+  async function searchOriginalPdfs(query) {
+    const folder = await getFolder('Originals');
+    return (await drive.searchPdfs(folder, query))
+      .filter(file => file.mimeType === PDF_MIME && childOf(file, folder))
+      .map(file => ({ name: file.name, url: fileUrl(file), entryId: extractId_(file.name) }));
+  }
+
   async function findBib(id) {
     const files = (await filesFor('Bibs', id)).filter(file => /\.bib$/i.test(file.name));
     if (files.length !== 1) throw new Error(`${id} に対応する Bib を1件に特定できません。現在のフォルダを確認してください。`);
@@ -335,5 +342,5 @@ export async function createWorkspace(drive, rootId, cache) {
     return drive.create(folder.id, name, content, textMime);
   }
 
-  return { root, readCatalog, rebuild, filesFor, findBib, openText, saveText, nextNumber, createBib, uploadOriginal, createNote };
+  return { root, readCatalog, rebuild, filesFor, searchOriginalPdfs, findBib, openText, saveText, nextNumber, createBib, uploadOriginal, createNote };
 }

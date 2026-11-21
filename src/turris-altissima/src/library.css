@@ -291,6 +291,15 @@ input::placeholder {
   gap:12px;
   margin:22px 0 13px
 }
+.library-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px 16px;
+  margin-inline-start: auto;
+}
+.library-toolbar-actions .text-button { font-size: 13px; }
 .count {
   font-size:14px;
   color:var(--muted);
@@ -380,6 +389,12 @@ input::placeholder {
 .entry-pdf .action {
   padding-inline: 9px;
 }
+#pdf-search-submit { min-height: 44px; }
+#pdf-search-help { grid-column: 1 / -1; margin: 0; }
+.pdf-search-status { margin: 20px 0 10px; overflow-wrap: anywhere; }
+.pdf-search-results .entry { cursor: auto; }
+.pdf-search-results .action { flex: none; }
+.pdf-hit-entry { overflow-wrap: anywhere; }
 .links {
   display:flex;
   flex-wrap:wrap;

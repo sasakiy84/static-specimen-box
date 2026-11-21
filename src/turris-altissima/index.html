@@ -75,7 +75,13 @@
         </div>
       </div>
     </section>
-    <div id="library-toolbar" class="toolbar"><p id="count" class="count" role="status" aria-live="polite"></p><div class="sort-wrap"><label for="sort">並べ替え</label><select id="sort"><option value="id-desc" selected>IDが新しい順</option><option value="newest">年が新しい順</option><option value="oldest">年が古い順</option><option value="title">タイトル順</option><option value="id">IDが古い順</option></select></div></div>
+    <div id="library-toolbar" class="toolbar">
+      <p id="count" class="count" role="status" aria-live="polite"></p>
+      <div class="library-toolbar-actions">
+        <a class="text-button" data-route="pdf-search" href="./pdf-search/">PDF全文検索</a>
+        <div class="sort-wrap" id="library-sort"><label for="sort">並べ替え</label><select id="sort"><option value="id-desc" selected>IDが新しい順</option><option value="newest">年が新しい順</option><option value="oldest">年が古い順</option><option value="title">タイトル順</option><option value="id">IDが古い順</option></select></div>
+      </div>
+    </div>
     <section id="list" class="list" aria-label="文献一覧"></section>
     <div id="empty" class="empty" hidden>
       <p id="empty-message"></p>
@@ -275,5 +281,40 @@
       <pre id="license-text" class="preserve-lines" aria-label="参考文献整形のライセンス全文" tabindex="0" hidden></pre>
     </details>
   </main>
+  <main class="page" data-page="pdf-search" hidden>
+    <header class="editor-page-header">
+      <nav class="editor-page-links" aria-label="ナビゲーション">
+        <a class="editor-home" data-route="library" href="../">
+          <img src="/assets/brand/mark.png" width="23" height="23" alt="">文献一覧に戻る
+        </a>
+      </nav>
+      <h1 tabindex="-1" data-page-heading>PDF全文検索</h1>
+      <p id="pdf-search-progress" class="connection-progress" role="status" hidden></p>
+    </header>
+    <div id="pdf-search-unavailable" hidden>
+      <p>PDF全文検索には、Google Drive の接続と文献フォルダの設定が必要です。</p>
+      <a class="action-button primary-action" data-route="settings" data-sample="false" href="../settings/">設定を開く</a>
+    </div>
+    <form id="pdf-search-form" class="controls" role="search" aria-label="PDF全文検索" hidden>
+      <div>
+        <label for="pdf-search-query">検索語</label>
+        <input id="pdf-search-query" type="search" placeholder="例：corpus &quot;visual comparison&quot;" autocomplete="off" maxlength="240" aria-describedby="pdf-search-help" required>
+      </div>
+      <button id="pdf-search-submit" type="submit" class="action-button primary-action">検索</button>
+      <p id="pdf-search-help" class="field-help">Originals 直下の PDF を、Drive の索引（本文・ファイル名など）で検索します。空白で区切った語をすべて含む PDF が一致します。フレーズは半角の二重引用符で囲みます。</p>
+    </form>
+    <p id="pdf-search-error" class="field-error" role="alert" hidden></p>
+    <p id="pdf-search-status" class="count pdf-search-status" role="status" hidden></p>
+    <section id="pdf-search-results" class="list pdf-search-results" aria-label="一致した PDF" hidden></section>
+  </main>
+  <template id="pdf-hit-template">
+    <article class="entry">
+      <div class="entry-content">
+        <h2 class="pdf-hit-name"></h2>
+        <a class="pdf-hit-entry source-link" data-route="library" hidden></a>
+      </div>
+      <a class="action" target="_blank" rel="noopener noreferrer">PDF</a>
+    </article>
+  </template>
 </body>
 </html>

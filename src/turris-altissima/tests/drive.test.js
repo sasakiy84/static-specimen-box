@@ -42,6 +42,33 @@ test('lists every page within the requested folder using the session token', asy
   assert.deepEqual(await drive.list('folder-1'), [{ id: 'file-1' }, { id: 'file-2' }]);
 });
 
+test('searches the indexed text of PDFs in a specific shared drive folder on every page', async () => {
+  const queries = [];
+  const drive = createDrive(session, async (address, options) => {
+    const { pathname, searchParams } = new URL(address);
+    assert.equal(pathname, '/drive/v3/files');
+    assert.equal(options.headers.get('Authorization'), 'Bearer test-token');
+    assert.equal(searchParams.get('corpora'), 'drive');
+    assert.equal(searchParams.get('driveId'), 'shared-drive');
+    assert.equal(searchParams.get('alt'), null);
+    queries.push(searchParams.get('q'));
+    return Response.json(searchParams.get('pageToken')
+      ? { files: [{ id: 'second' }] }
+      : { files: [{ id: 'first' }], nextPageToken: 'more' });
+  });
+  const folder = { id: 'originals', driveId: 'shared-drive' };
+  const found = await drive.searchPdfs(folder, String.raw`O'Reilly "visual comparison" path\term`);
+  const expected = String.raw`'originals' in parents and trashed = false and mimeType = 'application/pdf' and fullText contains 'O\'Reilly' and fullText contains '"visual comparison"' and fullText contains 'path\\term'`;
+  assert.deepEqual(found, [{ id: 'first' }, { id: 'second' }]);
+  assert.deepEqual(queries, [expected, expected]);
+});
+
+test('rejects empty PDF terms and unclosed phrases before searching Drive', async () => {
+  const drive = createDrive(session, () => assert.fail('Drive was queried'));
+  await assert.rejects(drive.searchPdfs({ id: 'originals' }, '  ""  '), /検索語を入力/);
+  await assert.rejects(drive.searchPdfs({ id: 'originals' }, 'term "open'), /引用符を閉じて/);
+});
+
 test('creates a small upload with the correct name, metadata, and media body', async () => {
   const drive = createDrive(session, async (address, options) => {
     const url = new URL(address);

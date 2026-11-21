@@ -607,7 +607,7 @@ export function setLibrary(next, { reset = false } = {}) {
     byId('recent-wrap').hidden = !recent.length;
     byId('schema-message').hidden = next?.schemaReady !== false;
     byId('library-content').hidden = !next;
-    byId('library-filters').hidden = byId('library-toolbar').hidden = !entries.length;
+    byId('library-filters').hidden = byId('library-sort').hidden = count.hidden = !entries.length;
     applyTagQuery();
     if (!next) return;
     const wasOpen = panel.open && !reset;
