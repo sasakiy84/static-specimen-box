@@ -38,8 +38,11 @@ function accessCache(key, mode, record) {
 }
 
 export function browserCatalogCache(key) {
+  const publishedKey = [key, 'published'];
   return {
     read: () => accessCache(key, 'readonly'),
     write: record => accessCache(key, 'readwrite', record),
+    readPublished: () => accessCache(publishedKey, 'readonly'),
+    writePublished: record => accessCache(publishedKey, 'readwrite', record),
   };
 }

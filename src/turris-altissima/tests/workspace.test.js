@@ -219,3 +219,59 @@ test('only rewrites the values of Bib annotations that changed', () => {
   assert.equal(writeBibAnnotations(source, '', ['reading']), source.replace('"Keep " # {this}', '{}'));
   assert.throws(() => writeBibAnnotations(source, 'Keep this', ['comma,tag']), /カンマ/);
 });
+
+test('reuses a previously loaded CSV only when its Drive version still matches', async () => {
+  const drive = demoDrive();
+  const initial = await (await createWorkspace(drive, 'demo-root')).rebuild();
+  const [csv] = await drive.list('Scripts');
+  let record;
+  const cache = {
+    readPublished: async () => structuredClone(record),
+    writePublished: async value => { record = structuredClone(value); },
+  };
+  const calls = trackDriveCalls(drive);
+
+  const read = async () => (await createWorkspace(drive, 'demo-root', cache)).readCatalog();
+  assert.deepEqual((await read()).entries, initial.entries);
+  assert.deepEqual(calls.filter(call => call.method === 'read'), [{ method: 'read', id: csv.id }]);
+  assert.equal(calls.filter(call => call.method === 'get' && call.id === 'Scripts').length, 1);
+
+  calls.length = 0;
+  assert.deepEqual((await read()).entries, initial.entries);
+  assert.equal(calls.some(call => call.method === 'read'), false);
+
+  const edited = record.content.replace('A notebook for reading research', 'Changed title');
+  await drive.update(csv.id, edited, 'text/csv');
+  calls.length = 0;
+  assert.equal((await read()).entries.find(entry => entry.id === 'MA0001').title, 'Changed title');
+  assert.deepEqual(calls.filter(call => call.method === 'read'), [{ method: 'read', id: csv.id }]);
+});
+
+test('checks folder placement and download permission before using a cached CSV', async () => {
+  const drive = demoDrive();
+  await (await createWorkspace(drive, 'demo-root')).rebuild();
+  const [csv] = await drive.list('Scripts');
+  let record;
+  const cache = {
+    readPublished: async () => record,
+    writePublished: async value => { record = value; },
+  };
+  const workspace = await createWorkspace(drive, 'demo-root', cache);
+  await workspace.readCatalog();
+
+  const get = drive.get;
+  drive.get = async id => {
+    const file = await get(id);
+    if (id === csv.id) file.capabilities.canDownload = false;
+    return file;
+  };
+  drive.read = async () => { throw new Error('Drive denied download'); };
+  await assert.rejects(workspace.readCatalog(), /Drive denied download/);
+
+  drive.get = async id => {
+    const file = await get(id);
+    if (id === 'Scripts') file.parents = ['outside-root'];
+    return file;
+  };
+  await assert.rejects(workspace.readCatalog(), /Scripts の場所が変わりました/);
+});

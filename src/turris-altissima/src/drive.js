@@ -1,5 +1,5 @@
 const API = 'https://www.googleapis.com';
-const FIELDS = 'id,name,mimeType,parents,trashed,modifiedTime,version,size,webViewLink,capabilities(canEdit,canAddChildren)';
+const FIELDS = 'id,name,mimeType,parents,trashed,modifiedTime,version,size,webViewLink,capabilities(canEdit,canAddChildren,canDownload)';
 export const FOLDER_MIME = 'application/vnd.google-apps.folder';
 
 export class DriveError extends Error {

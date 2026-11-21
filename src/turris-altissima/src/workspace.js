@@ -23,6 +23,12 @@ function single(files, name, optional = false) {
   return found[0];
 }
 
+function findCsv(files) {
+  const csv = single(files, csvName, true);
+  if (csv && !isRegular(csv)) throw new Error(`${csvName} は通常の CSV ファイルである必要があります。`);
+  return csv;
+}
+
 function fileUrl(file) {
   return file.webViewLink || `https://drive.google.com/open?id=${validateFileId(file.id)}`;
 }
@@ -103,10 +109,15 @@ function unpackBuild(record) {
 }
 
 export async function createWorkspace(drive, rootId, cache) {
-  const root = await drive.get(rootId);
+  validateFileId(rootId);
+  const [root, children] = await Promise.all([
+    drive.get(rootId),
+    rootId === 'root' ? null : drive.list(rootId),
+  ]);
   if (root.trashed || root.mimeType !== FOLDER_MIME) throw new Error('文献管理用のフォルダを選択してください。');
   validateFileId(root.id);
-  const rootChildren = (await drive.list(root.id)).filter(file => childOf(file, root));
+  const rootChildren = (root.id === rootId && children ? children : await drive.list(root.id))
+    .filter(file => childOf(file, root));
   const folders = {};
   for (const name of directories) {
     const folder = single(rootChildren, name);
@@ -151,17 +162,42 @@ export async function createWorkspace(drive, rootId, cache) {
   }
 
   async function targetCsv() {
-    const existing = single(await listFiles('Scripts'), csvName, true);
-    if (existing && !isRegular(existing)) throw new Error(`${csvName} は通常の CSV ファイルである必要があります。`);
-    return existing;
+    return findCsv(await listFiles('Scripts'));
+  }
+
+  async function cachedPublished(csvVersion) {
+    const build = await cachedBuild();
+    if (build?.record.csvVersion === csvVersion) return build.catalog;
+    try {
+      const record = await cache?.readPublished?.();
+      if (record?.csvVersion === csvVersion && typeof record.content === 'string') {
+        return parseCatalogRows_(csvRecords(record.content));
+      }
+    } catch { /* 読めないキャッシュは Drive の CSV で置き換える。 */ }
+    return null;
   }
 
   async function readCatalog() {
-    const csv = await targetCsv();
-    if (!csv) return { entries: [], schemaReady: true, modifiedAt: '' };
-    const verified = await ensureFile('Scripts', csv.id);
-    const text = await drive.read(verified.id);
-    return { ...parseCatalogRows_(csvRecords(text)), modifiedAt: verified.modifiedTime || '' };
+    const scripts = folders.Scripts;
+    const csv = findCsv((await drive.list(scripts.id)).filter(file => childOf(file, scripts)));
+    // 直前に同じルートから見つけたフォルダと、CSV の現在の所属を並行して確認する。
+    const [, verified] = await Promise.all([getFolder('Scripts'), csv && ensureFileInFolder(scripts, csv.id)]);
+    if (!verified) return { entries: [], schemaReady: true, modifiedAt: '' };
+    if (verified.name !== csvName) throw new Error(`${csvName} の名前が変わりました。`);
+
+    const modifiedAt = verified.modifiedTime || '';
+    const csvVersion = hasVersion(verified) && verified.capabilities?.canDownload === true ? version(verified) : null;
+    if (csvVersion) {
+      const cached = await cachedPublished(csvVersion);
+      if (cached) return { ...cached, modifiedAt };
+    }
+    const content = await drive.read(verified.id);
+    const catalog = parseCatalogRows_(csvRecords(content));
+    if (csvVersion) {
+      try { await cache?.writePublished?.({ content, csvVersion }); }
+      catch { /* キャッシュに保存できなくても取得した一覧は表示する。 */ }
+    }
+    return { ...catalog, modifiedAt };
   }
 
   async function inspectInputs() {

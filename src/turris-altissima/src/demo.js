@@ -16,7 +16,7 @@ export function demoDrive() {
     const file = {
       id, name, parents: parent ? [parent] : [], mimeType, modifiedTime: now,
       version: '1', size: String(new Blob([content ?? '']).size),
-      capabilities: { canEdit: true, canAddChildren: true },
+      capabilities: { canEdit: true, canAddChildren: true, canDownload: true },
     };
     files.set(id, file);
     bodies.set(id, content ?? '');
