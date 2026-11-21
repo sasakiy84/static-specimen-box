@@ -7,8 +7,8 @@
   <link rel="icon" href="../assets/brand/favicon.ico" sizes="16x16 32x32 48x48">
   <link rel="apple-touch-icon" href="../assets/brand/apple-touch-icon.png" sizes="180x180">
   <title>LLM 用プロンプト | turris-altissima</title>
-  <script type="module" crossorigin src="../assets/index-CT1WtLn_.js"></script>
-  <link rel="stylesheet" crossorigin href="../assets/index-C0tyFjT_.css">
+  <script type="module" crossorigin src="../assets/index-CUjL4Ai7.js"></script>
+  <link rel="stylesheet" crossorigin href="../assets/index-DtaIGOgQ.css">
 </head>
 <body>
   <main class="page" id="main" data-page="library" hidden>
@@ -65,17 +65,22 @@
     <p id="schema-message" class="notice" hidden>詳細情報を表示するには「一覧・CSV を更新」を押してください。</p>
     <section class="controls" id="library-filters" role="search" aria-label="文献を検索・絞り込み">
       <div class="search-field"><label for="search">キーワード</label><input id="search" type="search" autocomplete="off" placeholder="タイトル・著者・メモ・DOI"></div>
-      <div><label for="year">年</label><select id="year"><option value="">すべての年</option></select></div>
-      <div><label for="type">資料種別</label><select id="type"><option value="">すべての種別</option></select></div>
-      <div class="tag-search">
-        <label for="tag-query">タグ</label>
-        <div class="tag-combobox">
-          <input id="tag-query" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="tag-suggestions" aria-describedby="tag-help tag-error" autocomplete="off" spellcheck="false" placeholder="タグを選択、または (日本語 OR 英語) AND 読解">
-          <ul id="tag-suggestions" class="suggestions" role="listbox" aria-label="タグの候補" hidden></ul>
+      <button id="advanced-toggle" type="button" class="action-button advanced-toggle" aria-expanded="false" aria-controls="advanced-filters">
+        詳細検索<span id="advanced-count" class="advanced-count" hidden></span>
+      </button>
+      <div id="advanced-filters" class="advanced-filters" hidden>
+        <div><label for="year">年</label><select id="year"><option value="">すべての年</option></select></div>
+        <div><label for="type">資料種別</label><select id="type"><option value="">すべての種別</option></select></div>
+        <div class="tag-search">
+          <label for="tag-query">タグ</label>
+          <div class="tag-combobox">
+            <input id="tag-query" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="tag-suggestions" aria-describedby="tag-help tag-error" autocomplete="off" spellcheck="false" placeholder="タグを選択、または (日本語 OR 英語) AND 読解">
+            <ul id="tag-suggestions" class="suggestions" role="listbox" aria-label="タグの候補" hidden></ul>
+          </div>
+          <div class="tag-help-row"><p id="tag-help" class="field-help">複数選択は OR。AND・OR・括弧で組み合わせられます。</p><button id="clear-tags" type="button" class="text-button">タグを解除</button></div>
+          <p id="tag-error" class="field-error" role="status" hidden></p>
+          <div id="recent-wrap" class="recent-wrap" hidden><span class="small-label">最近使ったタグ</span><div id="recent-tags" class="tags" aria-label="最近更新されたBibのタグ"></div></div>
         </div>
-        <div class="tag-help-row"><p id="tag-help" class="field-help">複数選択は OR。AND・OR・括弧で組み合わせられます。</p><button id="clear-tags" type="button" class="text-button">タグを解除</button></div>
-        <p id="tag-error" class="field-error" role="status" hidden></p>
-        <div id="recent-wrap" class="recent-wrap" hidden><span class="small-label">最近使ったタグ</span><div id="recent-tags" class="tags" aria-label="最近更新されたBibのタグ"></div></div>
       </div>
     </section>
     <div id="library-toolbar" class="toolbar"><p id="count" class="count" role="status" aria-live="polite"></p><div class="sort-wrap"><label for="sort">並べ替え</label><select id="sort"><option value="id-desc" selected>IDが新しい順</option><option value="newest">年が新しい順</option><option value="oldest">年が古い順</option><option value="title">タイトル順</option><option value="id">IDが古い順</option></select></div></div>
