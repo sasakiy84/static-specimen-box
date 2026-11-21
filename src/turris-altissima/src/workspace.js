@@ -358,10 +358,21 @@ export async function createWorkspace(drive, rootId, cache) {
 
   async function uploadOriginal(id, file) {
     validateFilename(file.name);
-    await findBib(id);
-    const name = file.name.startsWith(id + '_') ? file.name : id + '_' + file.name;
+    const bib = await findBib(id);
+    const stem = bib.name.replace(/\.bib$/i, '');
+    const dot = file.name.lastIndexOf('.');
+    const extension = dot > 0 && dot < file.name.length - 1 ? file.name.slice(dot) : '';
     const folder = await getFolder('Originals', true);
-    if (single(await listFiles('Originals'), name, true)) throw new Error('同じ名前の原文が既にあります。ファイル名を変えてください。');
+    const originals = (await drive.list(folder.id)).filter(original => childOf(original, folder));
+    const names = new Set(originals.map(original => original.name));
+    for (const write of pendingWrites.values()) {
+      if (write.folder === 'Originals') names.add(write.file.name);
+    }
+    let name = stem + extension;
+    for (let sequence = 2; names.has(name); sequence++) {
+      name = `${stem}_${sequence}${extension}`;
+    }
+    validateFilename(name);
     const mime = /^[\w.+-]+\/[\w.+-]+$/.test(file.type) ? file.type : 'application/octet-stream';
     return recordWrite('Originals', await drive.create(folder.id, name, file, mime));
   }

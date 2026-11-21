@@ -138,6 +138,29 @@ test('uses the confirmed Bib body for the next rebuild without downloading it ag
   assert.equal(entries.find(entry => entry.bib_filename === saved.name).title, 'Saved version');
 });
 
+test('names Originals after the Bib and preserves the last extension', async () => {
+  const drive = demoDrive();
+  const base = 'MA0018_2026_森川-白井-Natthawut_日本語LLM生成テキスト識別データセットの構築';
+  await drive.create('Bibs', base + '.bib', '@misc{Dataset, title={Dataset}}', 'application/x-bibtex');
+  const workspace = await createWorkspace(drive, 'demo-root');
+  const content = 'original content';
+  const saved = await workspace.uploadOriginal('MA0018', new File([content], 'paper.final.PDF', { type: 'application/pdf' }));
+  assert.equal(saved.name, base + '.PDF');
+  assert.equal(saved.mimeType, 'application/pdf');
+  assert.equal(await drive.read(saved.id), content);
+});
+
+test('assigns a suffix before the extension when an Original already uses the Bib name', async () => {
+  const drive = demoDrive();
+  const workspace = await createWorkspace(drive, 'demo-root');
+  const file = new File(['pdf'], 'original.pdf', { type: 'application/pdf' });
+  const first = await workspace.uploadOriginal('MA0001', file);
+  const second = await workspace.uploadOriginal('MA0001', file);
+  assert.equal(second.name, first.name.replace(/\.pdf$/, '_2.pdf'));
+  assert.notEqual(first.id, second.id);
+  assert.equal((await drive.get(first.id)).name, first.name);
+});
+
 test('preserves the published CSV until Drive lists a newly saved attachment', async () => {
   const drive = demoDrive();
   const workspace = await createWorkspace(drive, 'demo-root');

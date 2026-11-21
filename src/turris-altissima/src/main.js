@@ -531,7 +531,7 @@ function prepareFormatter() {
             saved += ' PDF を追加しました。';
           }
           catch (error) {
-            uploadError = `PDF を追加できませんでした。文献の詳細から追加できます。 ${error.message}`;
+            uploadError = `PDF を追加できませんでした。文献の詳細にある「Originals に追加」から再試行できます。 ${error.message}`;
           }
         }
         await rebuildCatalog(context, { saved, uploadError });
@@ -769,7 +769,7 @@ upload.addEventListener('change', () => {
   if (!file) return;
   void action(async () => {
     const { context, entry } = requireCurrentEntry();
-    setText('entry-message', '原文をアップロードしています…');
+    setText('entry-message', 'Originals にアップロードしています…');
     const original = await context.service.uploadOriginal(entry.id, file);
     showSavedAttachment(entry.id, 'originals', original);
     await rebuildCatalog(context, { saved: `${original.name} を追加しました。` });
