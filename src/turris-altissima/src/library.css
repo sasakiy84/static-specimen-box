@@ -739,9 +739,9 @@ body.panel-open .toolbar {
   font: inherit;
   color: inherit;
 }
-.workspace-notice { margin: 0 0 16px; font-size: 14px; }
-#entry-message { margin: 0; padding: 8px 24px; border-bottom: 1px solid var(--border); }
-#entry-message:empty, #editable-notes:empty { display: none; }
+.workspace-notice { margin: 0 0 16px; font-size: 14px; overflow-wrap: anywhere; }
+.panel-message { margin: 0; padding: 8px 24px; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+#editable-notes:empty { display: none; }
 #attachment-actions, #editable-notes, #bib-annotations-actions { margin-top: 12px; }
 .primary-action { background: var(--accent); border-color: var(--accent); color: var(--surface); }
 .primary-action:hover:not(:disabled) { text-decoration: underline; text-underline-offset: 3px; }

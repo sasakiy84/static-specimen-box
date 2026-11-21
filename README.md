@@ -63,7 +63,7 @@ npm ci
 npm run dev
 ```
 
-Google Drive と連携する文献ライブラリです。26列 CSV を読み込み、キーワードやタグ式で検索できます。新規の Bib は同じ画面の Bib Formatter で作成します。既存 Bib と Markdown ノートは Drive 上の原本を編集でき、PDF などの原文も登録できます。原本の変更後に「一覧・CSV を更新」で一覧に反映します。
+Google Drive と連携する文献ライブラリです。26列 CSV を読み込み、キーワードやタグ式で検索できます。新規の Bib は同じ画面の Bib Formatter で作成します。既存 Bib と Markdown ノートは Drive 上の原本を編集でき、PDF などの原文も登録できます。アプリでの保存後は一覧に反映し、CSV を自動で更新します。CSV の更新に失敗した場合や、Drive 側で直接変更した場合は「一覧・CSV を更新」を押してください。
 
 Google Drive 接続の対象は `https://static-specimen-box.sasakiy84.net` です。OAuth の「テストユーザー」に登録した Google アカウントで接続し、直下に `Bibs/`、`Originals/`、`Notes/`、`Scripts/` があるルートを選びます。新規 CSV は `Scripts/_entries.csv` に作成します。既存の CSV は同じファイル ID で更新します。書き込み直前に変更を確認するため、初版の編集・採番は一つのルートを一人ずつ操作する運用を想定しています。
 

@@ -123,6 +123,42 @@ test('leaves the CSV untouched when an input changes during generation', async (
   assert.equal(await drive.read(csv.id), previous);
 });
 
+test('uses the confirmed Bib body for the next rebuild without downloading it again', async () => {
+  const drive = demoDrive();
+  const workspace = await createWorkspace(drive, 'demo-root');
+  await workspace.rebuild();
+  const { prefix } = await workspace.nextNumber();
+  const { saved } = await workspace.createBib(prefix, prefix + 'Latest.bib', '@book{Latest, title={Saved version}}');
+  const read = drive.read;
+  drive.read = id => {
+    assert.notEqual(id, saved.id);
+    return read(id);
+  };
+  const { entries } = await workspace.rebuild();
+  assert.equal(entries.find(entry => entry.bib_filename === saved.name).title, 'Saved version');
+});
+
+test('preserves the published CSV until Drive lists a newly saved attachment', async () => {
+  const drive = demoDrive();
+  const workspace = await createWorkspace(drive, 'demo-root');
+  await workspace.rebuild();
+  const [csv] = await drive.list('Scripts');
+  const previous = await drive.read(csv.id);
+  const list = drive.list;
+  const beforeUpload = await list('Originals');
+  const saved = await workspace.uploadOriginal('MA0001', new File(['pdf'], 'new.pdf', { type: 'application/pdf' }));
+  drive.list = id => id === 'Originals' ? beforeUpload : list(id);
+
+  await assert.rejects(workspace.rebuild(), /Drive の一覧にまだ反映されていません/);
+  assert.equal(await drive.read(csv.id), previous);
+
+  drive.list = list;
+  const { entries } = await workspace.rebuild();
+  assert.deepEqual(entries.find(entry => entry.id === 'MA0001').originals, [
+    { name: saved.name, url: 'https://drive.google.com/open?id=' + saved.id },
+  ]);
+});
+
 function trackDriveCalls(drive) {
   const calls = [];
   for (const method of ['get', 'list', 'read', 'update', 'create']) {

@@ -1,4 +1,4 @@
-import { FOLDER_MIME, PDF_MIME, validateFileId } from './drive.js';
+import { DriveError, FOLDER_MIME, PDF_MIME, validateFileId } from './drive.js';
 import { buildCatalogEntries_, serializeEntries_, extractId_, parseCatalogRows_, calculateMaState_, catalogRevision } from './catalog.js';
 
 const directories = ['Bibs', 'Originals', 'Notes', 'Scripts'];
@@ -29,7 +29,7 @@ function findCsv(files) {
   return csv;
 }
 
-function fileUrl(file) {
+export function fileUrl(file) {
   return file.webViewLink || `https://drive.google.com/open?id=${validateFileId(file.id)}`;
 }
 
@@ -127,6 +127,12 @@ export async function createWorkspace(drive, rootId, cache) {
 
   let lastBuild;
   let readingCache;
+  const pendingWrites = new Map();
+
+  function recordWrite(folder, file, content) {
+    pendingWrites.set(file.id, { folder, file, content });
+    return file;
+  }
 
   async function cachedBuild() {
     if (lastBuild) return lastBuild;
@@ -210,19 +216,43 @@ export async function createWorkspace(drive, rootId, cache) {
   }
 
   async function rebuild() {
+    const writes = new Map(pendingWrites);
     const [inputs, csv, previous] = await Promise.all([inspectInputs(), targetCsv(), cachedBuild()]);
+    // Drive の一覧が書き込みより古い場合、古い内容で CSV を上書きしない。
+    await Promise.all([...writes.values()].map(async ({ folder, file }) => {
+      const listed = inputs[folder.toLowerCase()].find(input => input.id === file.id);
+      const listedVersion = listed ? version(listed) : null;
+      if (listedVersion === version(file)) return;
+      let current;
+      try { current = await drive.get(file.id); }
+      catch (error) { if (!(error instanceof DriveError) || error.status !== 404) throw error; }
+      const included = current && childOf(current, folders[folder]) && isRegular(current) &&
+        (folder !== 'Bibs' || /\.bib$/i.test(current.name));
+      if (listedVersion !== (included ? version(current) : null)) {
+        throw new Error('保存したファイルの変更が Drive の一覧にまだ反映されていません。');
+      }
+    }));
+    const confirmWrites = () => {
+      for (const [id, write] of writes) {
+        if (pendingWrites.get(id) === write) pendingWrites.delete(id);
+      }
+    };
     const snapshot = inputVersions(inputs);
     const csvVersion = hasVersion(csv) ? version(csv) : null;
     const sameCsv = Boolean(csvVersion && previous?.record.csvVersion === csvVersion);
     if (sameCsv && previous.record.revision === catalogRevision && previous.record.snapshot === snapshot) {
+      confirmWrites();
       return { ...previous.catalog, modifiedAt: csv.modifiedTime || '', changed: false };
     }
 
     const bodies = new Map();
     const toRead = [];
     for (const file of inputs.bibs) {
+      const written = writes.get(file.id);
       const savedBody = previous?.bibSources.get(file.name);
-      if (typeof savedBody === 'string' && hasVersion(file) && previous.bibVersions.get(file.id) === version(file)) {
+      if (typeof written?.content === 'string' && hasVersion(file) && version(written.file) === version(file)) {
+        bodies.set(file.id, written.content);
+      } else if (typeof savedBody === 'string' && hasVersion(file) && previous.bibVersions.get(file.id) === version(file)) {
         bodies.set(file.id, savedBody);
       } else {
         toRead.push(file);
@@ -273,6 +303,7 @@ export async function createWorkspace(drive, rootId, cache) {
     lastBuild = unpackBuild(record);
     try { await cache?.write(record); }
     catch { /* IndexedDB を使えない場合は、同じ画面を開いている間だけキャッシュを使う。 */ }
+    confirmWrites();
     return { ...lastBuild.catalog, modifiedAt: saved.modifiedTime || '', changed: current !== content };
   }
 
@@ -306,7 +337,8 @@ export async function createWorkspace(drive, rootId, cache) {
     const latest = await ensureFile(folder, file.id, true);
     if (version(latest) !== version(file)) throw new Error('Drive 上のファイルが変更されました。下書きをコピーして、ファイルを開き直してください。');
     if (folder === 'Bibs') buildCatalogEntries_([{ name: latest.name, content }], [], []);
-    return drive.update(latest.id, content, folder === 'Bibs' ? bibMime : textMime);
+    const updated = await drive.update(latest.id, content, folder === 'Bibs' ? bibMime : textMime);
+    return recordWrite(folder, updated, folder === 'Bibs' ? content : undefined);
   }
 
   async function nextNumber() {
@@ -320,7 +352,8 @@ export async function createWorkspace(drive, rootId, cache) {
     const folder = await getFolder('Bibs', true);
     const next = await nextNumber();
     if (next.prefix !== prefix) return { next };
-    return { saved: await drive.create(folder.id, name, content, bibMime) };
+    const saved = await drive.create(folder.id, name, content, bibMime);
+    return { saved: recordWrite('Bibs', saved, content) };
   }
 
   async function uploadOriginal(id, file) {
@@ -330,7 +363,7 @@ export async function createWorkspace(drive, rootId, cache) {
     const folder = await getFolder('Originals', true);
     if (single(await listFiles('Originals'), name, true)) throw new Error('同じ名前の原文が既にあります。ファイル名を変えてください。');
     const mime = /^[\w.+-]+\/[\w.+-]+$/.test(file.type) ? file.type : 'application/octet-stream';
-    return drive.create(folder.id, name, file, mime);
+    return recordWrite('Originals', await drive.create(folder.id, name, file, mime));
   }
 
   async function createNote(id, content) {
@@ -339,7 +372,7 @@ export async function createWorkspace(drive, rootId, cache) {
     const names = new Set((await listFiles('Notes')).map(file => file.name));
     let name = `${id}_ノート.md`, sequence = 2;
     while (names.has(name)) name = `${id}_ノート${sequence++}.md`;
-    return drive.create(folder.id, name, content, textMime);
+    return recordWrite('Notes', await drive.create(folder.id, name, content, textMime));
   }
 
   return { root, readCatalog, rebuild, filesFor, searchOriginalPdfs, findBib, openText, saveText, nextNumber, createBib, uploadOriginal, createNote };

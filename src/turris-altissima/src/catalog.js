@@ -376,6 +376,12 @@ function parseCatalogRows_(rows) {
     });
     return { entries: entries, schemaReady: schemaReady };
 }
+export function buildCatalogEntry(bib, originals, notes) {
+    const [row] = buildCatalogEntries_([bib], [], []);
+    const [entry] = parseCatalogRows_([CSV_COLUMNS, CSV_COLUMNS.map(name => row[name])]).entries;
+    return { ...entry, originals, notes };
+}
+
 function calculateMaState_(filenames) {
     let highest = 0, latestId = null;
     for (const filename of filenames) {

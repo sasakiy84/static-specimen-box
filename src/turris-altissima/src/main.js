@@ -5,8 +5,8 @@ import { LibraryCore } from './library-core.js';
 import { googleConfig } from './google-config.js';
 import { authorize, loadIdentity, pickFolder, revoke } from './google-auth.js';
 import { createDrive, DriveError, folderIdFromLink, getAccessToken } from './drive.js';
-import { createWorkspace } from './workspace.js';
-import { readBibAnnotations, writeBibAnnotations } from './catalog.js';
+import { createWorkspace, fileUrl } from './workspace.js';
+import { buildCatalogEntry, extractId_, readBibAnnotations, writeBibAnnotations } from './catalog.js';
 import { browserCatalogCache } from './catalog-cache.js';
 import { citationAssets } from './citation-assets.js';
 import { demoDrive } from './demo.js';
@@ -178,6 +178,14 @@ function connectionErrorTarget() {
   return 'workspace-error';
 }
 
+function clearExpiredConnection(error) {
+  if (!(error instanceof DriveError) || error.status !== 401) return false;
+  forgetDriveSession(connected?.session);
+  connected = undefined;
+  if (workspace) clearWorkspace();
+  return true;
+}
+
 async function action(operation, errorTarget = 'workspace-error') {
   if (isBusy) return;
   isBusy = true;
@@ -186,12 +194,7 @@ async function action(operation, errorTarget = 'workspace-error') {
   try {
     await operation();
   } catch (error) {
-    const expired = error instanceof DriveError && error.status === 401;
-    if (expired) {
-      forgetDriveSession(connected?.session);
-      connected = undefined;
-      if (workspace) clearWorkspace();
-    }
+    const expired = clearExpiredConnection(error);
     let message = error instanceof Error ? error.message : '操作を完了できませんでした。';
     if (errorTarget === 'formatter-message' && message.includes('引用キーが空です')) {
       message += '。変換結果の先頭のカンマの前に引用キーを入力してください。';
@@ -368,18 +371,37 @@ disconnect.addEventListener('click', async () => {
   else (connect.hidden ? demoButton : connect).focus();
 });
 
-refresh.addEventListener('click', () => action(async () => {
-  setText('workspace-status', '文献を読み込み、CSV を生成しています…');
+function setCatalogStatus(message, error = '') {
+  setText('workspace-status', message);
+  setText('workspace-error', error);
+  if (details.open) {
+    setText('entry-message', message);
+    setText('entry-error', error);
+  }
+}
+
+async function rebuildCatalog(context, { saved = '', uploadError = '' } = {}) {
+  if (workspace !== context) return;
+  if (saved) dirty = true;
+  setCatalogStatus(saved ? `${saved} CSV を更新しています…` : '文献を読み込み、CSV を更新しています…', uploadError);
   try {
-    const result = await workspace.service.rebuild();
+    const result = await context.service.rebuild();
+    if (workspace !== context) return;
     setCatalog(result);
     dirty = false;
-    setText('workspace-status', result.changed ? '一覧と CSV を更新しました。' : '一覧と CSV は最新です。');
+    const status = result.changed ? '一覧と CSV を更新しました。' : '一覧と CSV は最新です。';
+    setCatalogStatus(saved ? `${saved} ${status}` : status, uploadError);
   } catch (error) {
-    setText('workspace-status', dirty ? '原本に変更があります。一覧と CSV は更新待ちです。' : '');
-    throw error;
+    if (workspace !== context) return;
+    const savedStatus = saved || (dirty ? '原本は保存済みです。' : '');
+    const reconnect = clearExpiredConnection(error);
+    const retry = reconnect ? '再接続後に「一覧・CSV を更新」を押してください。' : '「一覧・CSV を更新」で再試行できます。';
+    const message = `CSV を更新できませんでした。 ${error.message} ${retry}`;
+    setCatalogStatus(savedStatus, uploadError ? `${uploadError} ${message}` : message);
   }
-}));
+}
+
+refresh.addEventListener('click', () => action(() => rebuildCatalog(workspace)));
 
 function resetPdfSearch() {
   pdfSearchForm.reset();
@@ -431,10 +453,27 @@ pdfSearchForm.addEventListener('submit', event => {
   }, 'pdf-search-error');
 });
 
-function afterWrite(message) {
-  dirty = true;
-  setText('workspace-status', '原本に変更があります。「一覧・CSV を更新」で一覧に反映できます。');
-  setText('entry-message', message);
+function showSavedBib(file, content) {
+  const id = extractId_(file.name);
+  const previous = catalog.entries.find(entry => entry.id === id);
+  const entry = buildCatalogEntry(
+    { name: file.name, url: fileUrl(file), modifiedAt: file.modifiedTime, content },
+    previous?.originals ?? [], previous?.notes ?? [],
+  );
+  setCatalog({ ...catalog, entries: [...catalog.entries.filter(item => item.id !== id), entry] });
+}
+
+function showSavedAttachment(id, key, file, previousFile) {
+  const url = fileUrl(file);
+  const previousUrl = previousFile ? fileUrl(previousFile) : url;
+  const entries = catalog.entries.map(entry => {
+    if (entry.id !== id) return entry;
+    const files = entry[key].filter(item => item.url !== previousUrl && item.url !== url);
+    files.push({ name: file.name, url });
+    files.sort((left, right) => left.name.localeCompare(right.name));
+    return { ...entry, [key]: files };
+  });
+  setCatalog({ ...catalog, entries });
 }
 
 function resetFormatter() {
@@ -477,18 +516,25 @@ function prepareFormatter() {
           setText('formatter-message', `採番が ${result.next.nextId} に変わりました。ファイル名を確認して、もう一度登録してください。`);
           return;
         }
-        let message = `${result.saved.name} を保存しました。`;
-        if (pdf) {
-          try { await context.service.uploadOriginal(prefix.slice(0, -1), pdf); }
-          catch (error) {
-            message += ` PDF の追加に失敗しました。一覧を更新したあと、文献の詳細から追加できます。 ${error.message}`;
-          }
-        }
         discardDraft(key);
         resetFormatter();
-        afterWrite(message);
-        setText('workspace-status', `${message} 「一覧・CSV を更新」で反映できます。`);
+        showSavedBib(result.saved, bib);
         if (readRoute().page === 'new') navigate(pageUrl('library', context.isDemo), true);
+        let saved = `${result.saved.name} を保存しました。`;
+        let uploadError = '';
+        if (pdf) {
+          setCatalogStatus(`${saved} PDF をアップロードしています…`);
+          try {
+            const id = extractId_(result.saved.name);
+            const original = await context.service.uploadOriginal(id, pdf);
+            showSavedAttachment(id, 'originals', original);
+            saved += ' PDF を追加しました。';
+          }
+          catch (error) {
+            uploadError = `PDF を追加できませんでした。文献の詳細から追加できます。 ${error.message}`;
+          }
+        }
+        await rebuildCatalog(context, { saved, uploadError });
       }, 'formatter-message'),
     });
     formatterContext = context;
@@ -676,6 +722,7 @@ async function showNotes(context, entry) {
 details.addEventListener('libraryentry', event => {
   currentEntry = event.detail;
   setText('entry-message', '');
+  setText('entry-error', '');
   updateButtons();
   void showNotes(workspace, currentEntry);
 });
@@ -723,8 +770,9 @@ upload.addEventListener('change', () => {
   void action(async () => {
     const { context, entry } = requireCurrentEntry();
     setText('entry-message', '原文をアップロードしています…');
-    const saved = await context.service.uploadOriginal(entry.id, file);
-    afterWrite(`${saved.name} を追加しました。一覧と CSV を更新してください。`);
+    const original = await context.service.uploadOriginal(entry.id, file);
+    showSavedAttachment(entry.id, 'originals', original);
+    await rebuildCatalog(context, { saved: `${original.name} を追加しました。` });
   }, 'entry-message');
 });
 
@@ -745,7 +793,7 @@ byId('edit-form').addEventListener('submit', event => {
   if (activeEdit?.annotations && tagEntry.value.trim() && !addBibTag(tagEntry.value)) return;
   void action(async () => {
     if (!activeEdit || activeEdit.context !== workspace) throw new Error('ファイルを開き直してください。');
-    const { file, context, entryId, annotations, tags } = activeEdit;
+    const { file, context, folder, entryId, annotations, tags } = activeEdit;
     const content = annotations ? writeBibAnnotations(activeEdit.content, editSource.value, tags) : editSource.value;
     if (annotations && content === activeEdit.content) {
       editDialog.close();
@@ -755,21 +803,9 @@ byId('edit-form').addEventListener('submit', event => {
       ? await context.service.saveText(activeEdit, content)
       : await context.service.createNote(entryId, content);
     editDialog.close();
-    if (annotations) {
-      const updated = readBibAnnotations(content);
-      const entries = catalog.entries.map(entry => entry.id === entryId ? {
-        ...entry,
-        bib_source: content,
-        bib_fields: updated.fields,
-        bib_notes: updated.note,
-        bib_modified_at: saved.modifiedTime,
-        tags: updated.tags,
-      } : entry);
-      setCatalog({ ...catalog, entries });
-    } else {
-      void showNotes(context, currentEntry);
-    }
-    afterWrite(`${saved.name} を保存しました。一覧と CSV を更新してください。`);
+    if (folder === 'Bibs') showSavedBib(saved, content);
+    else showSavedAttachment(entryId || extractId_(saved.name), 'notes', saved, file);
+    await rebuildCatalog(context, { saved: `${saved.name} を保存しました。` });
   }, 'edit-error');
 });
 
