@@ -40,9 +40,6 @@ const selectedTags = byId('bib-tag-selected');
 const tagCandidates = byId('bib-tag-candidates');
 const tagsCollator = new Intl.Collator('ja', { numeric: true, sensitivity: 'base' });
 const googleEnabled = location.origin === googleConfig.origin || import.meta.env.DEV;
-const caption = new Intl.DateTimeFormat('ja-JP', {
-  timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
-});
 
 let connected;
 let workspace;
@@ -116,7 +113,6 @@ function rememberFolder(userId, rootId) {
 function setCatalog(data, reset = false) {
   catalog = data;
   setLibrary(data, { reset });
-  setText('csv-updated', data?.modifiedAt ? `CSV更新：${caption.format(new Date(data.modifiedAt))}（JST）` : '');
 }
 
 function clearWorkspace({ reset = true } = {}) {
