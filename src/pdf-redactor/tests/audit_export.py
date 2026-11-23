@@ -9,20 +9,19 @@ import pymupdf
 from PIL import Image
 
 
-def ocr(image, executable, language="eng"):
+def render(page):
+    pixmap = page.get_pixmap(matrix=pymupdf.Matrix(3, 3), alpha=False)
+    return Image.frombytes("RGB", (pixmap.width, pixmap.height), pixmap.samples)
+
+
+def ocr(image, executable):
     data = BytesIO()
     image.save(data, format="PNG")
     result = subprocess.run(
-        [executable, "stdin", "stdout", "-l", language, "--psm", "11"],
+        [executable, "stdin", "stdout", "-l", "eng", "--psm", "11"],
         input=data.getvalue(), capture_output=True, check=True,
     )
     return result.stdout.decode()
-
-
-def image_resource(document, page):
-    images = page.get_images(full=True)
-    assert len(images) == 1
-    return Image.open(BytesIO(document.extract_image(images[0][0])["image"])).convert("RGB")
 
 
 def check_black_region(image, box):
@@ -33,14 +32,12 @@ def check_black_region(image, box):
 
 def check_export(original, tesseract):
     with pymupdf.open(original) as source, pymupdf.open(original.with_name("exported.pdf")) as output:
-        assert "SECRET ALPHA 832" in source[0].get_text()
+        secrets = ("SECRET ALPHA 832", "SECRET ROTATED 902", "SECRET INVISIBLE 744")
+        assert all(secret in "".join(page.get_text() for page in source) for secret in secrets)
         assert source.metadata["author"] == "SECRET METADATA 077"
         assert source.embfile_count() == 1
         assert list(source[0].widgets())
         assert list(source[0].annots())
-        original_scan = image_resource(source, source[1])
-        assert "SECRET SCAN 907" in ocr(original_scan, tesseract)
-        assert "山田花子" in "".join(ocr(original_scan, tesseract, "jpn").split())
 
         assert len(output) == 3
         assert output.embfile_count() == 0
@@ -49,23 +46,23 @@ def check_export(original, tesseract):
         ))
         assert not output.get_xml_metadata()
         for page in output:
-            assert not page.get_text().strip()
             assert not list(page.annots())
             assert not list(page.widgets())
             assert not page.get_links()
 
-        first, second, third = (image_resource(output, page) for page in output)
-        check_black_region(first, (.104, .209, .886, .411))
-        check_black_region(second, (.074, .104, .366, .696))
-        second = second.rotate(90, expand=True)
-        text1 = ocr(first, tesseract)
-        text2 = ocr(second, tesseract)
-        text3 = ocr(third, tesseract)
-        assert "KEEP HEADER" in text1 and "KEEP FOOTER" in text1
-        assert "KEEP ROTATED" in text2
-        assert "KEEP LAST PAGE" in text3
-        assert "SECRET" not in text1 + text2 + text3
-        assert "山田花子" not in "".join(ocr(second, tesseract, "jpn").split())
+        first, second, third = output
+        assert not first.get_images() and not second.get_images()
+        assert len(third.get_images()) == 1
+        assert " ".join(first.get_text().split()) == "KEEP HEADER KEEP FOOTER Left Right"
+        assert second.get_text().strip() == "KEEP ROTATED"
+        assert third.get_text().strip() == "KEEP LAST PAGE"
+        assert not any(secret in "".join(page.get_text() for page in output) for secret in secrets)
+
+        check_black_region(render(first), (.125, .209, .592, .411))
+        check_black_region(render(second), (.074, .104, .366, .696))
+        assert "SECRET ALPHA" in ocr(render(source[0]), tesseract)
+        assert "SECRET ROTATED 902" in ocr(render(source[1]).rotate(90, expand=True), tesseract)
+        assert "SECRET" not in ocr(render(first), tesseract) + ocr(render(second).rotate(90, expand=True), tesseract)
 
 
 if __name__ == "__main__":
@@ -74,4 +71,4 @@ if __name__ == "__main__":
     parser.add_argument("--tesseract", default="tesseract")
     args = parser.parse_args()
     check_export(args.original, args.tesseract)
-    print("MuPDF の構造・画素検査と、Tesseract の日英 OCR 検査に合格しました。")
+    print("MuPDF の構造・文字抽出・描画と Tesseract の OCR 検査に合格しました。")

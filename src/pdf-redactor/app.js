@@ -391,9 +391,8 @@ download.addEventListener('click', async () => {
   setMessage('error');
   setMessage('status', '黒塗り PDF を生成しています…');
   try {
-    const pdf = await engine.exportPdf(documentPdf, masks, (number, total) => {
-      setMessage('status', `黒塗り PDF を生成しています… ${number} / ${total} ページ`);
-    });
+    const { exportPdf } = await import('./redaction.js');
+    const pdf = await exportPdf(documentPdf, masks);
     const url = URL.createObjectURL(pdf);
     const link = document.createElement('a');
     link.href = url;
@@ -405,7 +404,8 @@ download.addEventListener('click', async () => {
     setMessage('status', '黒塗り PDF を生成しました。');
   } catch (error) {
     setMessage('status');
-    setMessage('error', `PDF を保存できませんでした。 ${error.message}`);
+    const reason = error instanceof Error ? error.message : 'この PDF の文字や描画には対応していません。';
+    setMessage('error', `PDF を保存できませんでした。 ${reason}`);
   } finally {
     exporting = false;
     updateControls();

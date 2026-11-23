@@ -63,9 +63,9 @@ npm ci
 npm run dev
 ```
 
-ページ上で黒塗り範囲を選び、別ファイルとして保存します。全ページをブラウザ内で画像化し、選択範囲を黒い画素で置き換えた画像から PDF を作ります。出力には元の文字レイヤー、フォーム、添付ファイル、文書メタデータを含めません。
+ページ上で黒塗り範囲を選ぶと、範囲に重なる文字を PDF の内部から削除します。処理はブラウザ内で行い、範囲外の文字は書き出した PDF でも検索・コピーできます。フォーム、注釈、添付ファイル、文書メタデータは出力から除きます。画像を含む選択ページや、一部のフォントや描画方式を使う PDF では、エラーを表示します。
 
-`npm run build` で配布ファイルを作ります。`npx playwright install chromium` のあと `npm test` を実行すると、画素の境界、回転したページ、出力ファイルの構造と黒塗り範囲を検査できます。PyMuPDF、Pillow、Tesseract の英語・日本語データがある環境では、ブラウザテストが生成した `input.pdf` を `tests/audit_export.py` に渡して、独立した文字抽出と OCR でも確認できます。
+`npm run build` で配布ファイルを作ります。`npx playwright install chromium` のあと `npm test` を実行すると、範囲外の文字の保持、指定した文字の削除、回転したページ、対応外の PDF の処理を確認できます。PyMuPDF、Pillow、Tesseract の英語データがある環境では、ブラウザテストが生成した `input.pdf` を `tests/audit_export.py` に渡して、独立した文字抽出、黒塗りの描画、OCR でも確認できます。
 
 ## turris-altissima
 

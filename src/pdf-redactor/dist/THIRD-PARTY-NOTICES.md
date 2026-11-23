@@ -2,6 +2,8 @@
 
 The app bundles dependencies which contain the following licenses:
 
+## @fabifont/open-redact-pdf - 0.6.0 (MIT OR Apache-2.0)
+
 ## @pdf-lib/standard-fonts - 1.0.0 (MIT)
 
 MIT License

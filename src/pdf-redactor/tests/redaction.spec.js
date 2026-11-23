@@ -1,15 +1,18 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
-import { PDFArray, PDFDict, PDFDocument, PDFName, PDFRawStream, PDFString, StandardFonts,
-  decodePDFRawStream, degrees, rgb } from 'pdf-lib';
+import { PDFDocument, PDFName, PDFString, StandardFonts, TextRenderingMode, degrees, popGraphicsState,
+  pushGraphicsState, rgb, setTextRenderingMode } from 'pdf-lib';
+import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 
 const fakeText = 'SECRET ALPHA 832';
-const fakeScan = 'SECRET SCAN 907';
+const fakeScan = 'SCANNED SAMPLE 907';
+const fakeRotated = 'SECRET ROTATED 902';
+const fakeHidden = 'SECRET INVISIBLE 744';
 const fakeAuthor = 'SECRET METADATA 077';
 const fakeComment = 'SECRET COMMENT 156';
 const fakeAttachment = 'SECRET ATTACHMENT 611';
 const fakeForm = 'SECRET FORM 319';
-const firstBox = { left: .10, top: .205, right: .89, bottom: .415 };
+const firstBox = { left: .121, top: .205, right: .596, bottom: .415 };
 const rotatedBox = { left: .07, top: .10, right: .37, bottom: .70 };
 
 async function makeFixture(page) {
@@ -41,8 +44,10 @@ async function makeFixture(page) {
   first.drawText('KEEP FOOTER', { x: 55, y: 105, size: 26, font });
   first.drawRectangle({ x: 55, y: 511, width: 44, height: 16, color: rgb(0, .5, .2) });
   first.drawRectangle({ x: 70, y: 448, width: 220, height: 39, color: rgb(1, .7, .7) });
-  first.drawText(fakeText, { x: 80, y: 459, size: 24, font });
-  first.drawText('SECRET INVISIBLE 744', { x: 55, y: 85, size: 12, font, opacity: 0 });
+  first.drawText(`Left ${fakeText} Right`, { x: 20, y: 459, size: 24, font });
+  first.pushOperators(pushGraphicsState(), setTextRenderingMode(TextRenderingMode.Invisible));
+  first.drawText(fakeHidden, { x: 65, y: 431, size: 12, font });
+  first.pushOperators(popGraphicsState());
   const comment = pdf.context.register(pdf.context.obj({
     Type: 'Annot', Subtype: 'Text', F: 2, Rect: [64, 140, 88, 164], Contents: PDFString.of(fakeComment),
   }));
@@ -54,12 +59,13 @@ async function makeFixture(page) {
   const second = pdf.addPage([600, 480]);
   second.setCropBox(40, 30, 520, 400);
   second.setRotation(degrees(90));
-  const image = await pdf.embedPng(scan);
-  second.drawImage(image, { x: 110, y: 72, width: 280, height: 85 });
+  second.drawText(fakeRotated, { x: 110, y: 95, size: 23, font });
   second.drawText('KEEP ROTATED', { x: 85, y: 343, size: 24, font });
 
   const third = pdf.addPage([420, 300]);
   third.drawText('KEEP LAST PAGE', { x: 55, y: 200, size: 26, font });
+  const image = await pdf.embedPng(scan);
+  third.drawImage(image, { x: 140, y: 55, width: 260, height: 79 });
   third.drawRectangle({ x: 55, y: 102, width: 70, height: 42, color: rgb(.2, .3, 1) });
   return Buffer.from(await pdf.save());
 }
@@ -85,58 +91,23 @@ async function selectBox(page, preview, box, backwards = false) {
   await page.mouse.up();
 }
 
-function readPageImage(pdf, page) {
-  const resources = page.node.Resources();
-  const fonts = resources.lookupMaybe(PDFName.of('Font'), PDFDict);
-  expect(fonts?.keys().length ?? 0).toBe(0);
-  const annotations = page.node.lookupMaybe(PDFName.of('Annots'), PDFArray);
-  expect(annotations?.size() ?? 0).toBe(0);
-  const images = resources.lookup(PDFName.of('XObject'), PDFDict).entries();
-  expect(images).toHaveLength(1);
-  const image = pdf.context.lookup(images[0][1], PDFRawStream);
-  expect(image.dict.get(PDFName.of('Subtype')).toString()).toBe('/Image');
-  expect(image.dict.get(PDFName.of('ColorSpace')).toString()).toBe('/DeviceRGB');
-  expect(image.dict.get(PDFName.of('BitsPerComponent')).asNumber()).toBe(8);
-  expect(image.dict.get(PDFName.of('SMask'))).toBeUndefined();
-  const contents = page.node.Contents();
-  const streams = contents instanceof PDFArray ? contents.asArray() : [contents];
-  const drawing = streams.map(ref => Buffer.from(decodePDFRawStream(pdf.context.lookup(ref, PDFRawStream)).decode()).toString()).join('\n');
-  expect(drawing.trim().split('\n').map(line => line.trim().split(/\s+/).at(-1)))
-    .toEqual(['q', 'cm', 'cm', 'cm', 'cm', 'Do', 'Q']);
-  return {
-    width: image.dict.get(PDFName.of('Width')).asNumber(),
-    height: image.dict.get(PDFName.of('Height')).asNumber(),
-    pixels: decodePDFRawStream(image).decode(),
-  };
-}
-
-function pixel({ pixels, width, height }, x, y) {
-  const index = (Math.floor(y * height) * width + Math.floor(x * width)) * 3;
-  return [...pixels.subarray(index, index + 3)];
-}
-
-function expectColorNear(actual, expected) {
-  // 同じ PDF の RGB 成分でも、描画時の８ビットへの丸めで１だけ異なる場合がある。
-  expect(Math.max(...actual.map((value, channel) => Math.abs(value - expected[channel])))).toBeLessThanOrEqual(1);
-}
-
-function expectBlackImageRegion(image, box) {
-  const { pixels, width, height } = image;
-  expect(pixels.length).toBe(width * height * 3);
-  const left = Math.ceil((box.left + .004) * width);
-  const right = Math.floor((box.right - .004) * width);
-  const top = Math.ceil((box.top + .004) * height);
-  const bottom = Math.floor((box.bottom - .004) * height);
-  let nonblack = 0;
-  for (let y = top; y < bottom; y++) {
-    for (let index = (y * width + left) * 3; index < (y * width + right) * 3; index++) {
-      if (pixels[index] !== 0) nonblack++;
+async function readPageText(bytes) {
+  const task = getDocument({ data: new Uint8Array(bytes), useSystemFonts: true });
+  try {
+    const pdf = await task.promise;
+    const texts = [];
+    for (let number = 1; number <= pdf.numPages; number++) {
+      const page = await pdf.getPage(number);
+      const { items } = await page.getTextContent();
+      texts.push(items.map(item => item.str).join(' '));
     }
+    return texts;
+  } finally {
+    await task.destroy();
   }
-  expect(nonblack).toBe(0);
 }
 
-test('exports only masked image streams and removes text, hidden content and document identifiers', async ({ page }, testInfo) => {
+test('削除した文字は抽出できず、範囲外の文字は検索できる', async ({ page }, testInfo) => {
   const requests = [];
   const errors = [];
   page.context().on('request', request => {
@@ -166,27 +137,36 @@ test('exports only masked image streams and removes text, hidden content and doc
   await page.screenshot({ path: testInfo.outputPath('preview.png') });
   const downloaded = page.waitForEvent('download');
   await save.click();
+  await expect(page.getByText('黒塗り PDF を生成しました。')).toBeVisible();
   const result = await downloaded;
   expect(result.suggestedFilename()).toBe('redacted.pdf');
   const outputPath = testInfo.outputPath('exported.pdf');
   await result.saveAs(outputPath);
   const bytes = await readFile(outputPath);
   const exported = await PDFDocument.load(bytes, { updateMetadata: false });
-  expect(exported.getPages().map(page => page.getSize())).toEqual([
-    { width: 504, height: 632 }, { width: 400, height: 520 }, { width: 420, height: 300 },
-  ]);
+  expect(exported.getPages()[1].getRotation().angle).toBe(90);
+  expect(exported.getPages()[1].getCropBox()).toEqual({ x: 40, y: 30, width: 520, height: 400 });
+  const inputTexts = await readPageText(fixture);
+  expect(inputTexts[0]).toContain(fakeText);
+  expect(inputTexts[0]).toContain(fakeHidden);
+  expect(inputTexts[1]).toContain(fakeRotated);
+  const outputTexts = await readPageText(bytes);
+  expect(outputTexts[0].replace(/\s+/g, ' ').trim()).toBe('KEEP HEADER KEEP FOOTER Left Right');
+  expect(outputTexts[1]).toContain('KEEP ROTATED');
+  expect(outputTexts[2]).toContain('KEEP LAST PAGE');
+  for (const text of [fakeText, fakeHidden, fakeRotated]) {
+    expect(outputTexts.join(' ')).not.toContain(text);
+  }
   expect(exported.getTitle()).toBeUndefined();
   expect(exported.getAuthor()).toBeUndefined();
   expect(exported.getSubject()).toBeUndefined();
   for (const key of ['AcroForm', 'Metadata', 'Names', 'OpenAction', 'OCProperties']) {
     expect(exported.catalog.get(PDFName.of(key))).toBeUndefined();
   }
-  const [first, second, third] = exported.getPages().map(page => readPageImage(exported, page));
-  expectBlackImageRegion(first, firstBox);
-  expectBlackImageRegion(second, rotatedBox);
-  expectColorNear(pixel(first, 70 / 504, 112 / 632), [0, 128, 51]);
-  expectColorNear(pixel(third, 75 / 420, 178 / 300), [51, 77, 255]);
-  for (const text of [fakeAuthor, fakeAttachment, fakeComment, fakeForm, fakeScan, fakeText, 'private-name-fixture']) {
+  for (const page of exported.getPages()) {
+    expect(page.node.Annots()).toBeUndefined();
+  }
+  for (const text of [fakeAuthor, fakeAttachment, fakeComment, fakeForm, fakeText, 'private-name-fixture']) {
     expect(bytes.includes(text)).toBe(false);
   }
   expect(errors).toEqual([]);
@@ -235,6 +215,21 @@ test('supports keyboard selection, undo, and precise zoom on a small screen', as
   await expect(save).toBeEnabled();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
   await page.screenshot({ path: testInfo.outputPath('mobile.png'), fullPage: true });
+});
+
+test('スキャン画像の文字を選ぶと、黒塗り済みの PDF を生成せずエラーを表示する', async ({ page }) => {
+  await page.goto('./');
+  await openByDrop(page, await makeFixture(page));
+  const next = page.getByRole('button', { name: '次のページ' });
+  await next.click();
+  await next.click();
+  const preview = page.getByRole('application', { name: 'PDF プレビュー 3 ページ目' });
+  await selectBox(page, preview, { left: .35, top: .56, right: .90, bottom: .80 });
+  const downloads = [];
+  page.on('download', event => downloads.push(event));
+  await page.getByRole('button', { name: '黒塗り PDF を保存' }).click();
+  await expect(page.getByRole('alert')).toContainText('3 ページ目を処理できませんでした');
+  expect(downloads).toHaveLength(0);
 });
 
 test('rejects an invalid PDF and keeps export disabled', async ({ page }) => {
