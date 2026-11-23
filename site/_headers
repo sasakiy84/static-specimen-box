@@ -10,6 +10,13 @@
 /image-compressor/*
   Content-Security-Policy: default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; worker-src 'self' blob:; img-src blob:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
 
+/pdf-redactor/*
+  Content-Security-Policy: default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; worker-src 'self'; font-src 'self' blob: data:; img-src 'self' blob: data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  Referrer-Policy: no-referrer
+
+/pdf-redactor/
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
+
 /turris-altissima/*
   Content-Security-Policy: default-src 'none'; script-src 'self' https://accounts.google.com/gsi/client https://apis.google.com https://www.gstatic.com; style-src 'self' https://accounts.google.com/gsi/style 'sha256-88QphsXJQwxKP9xXR175ZSMzpaq6Swzj9u3QQ+G2Wig=' 'sha256-O5RJqRuy+/mksltO9mWs9LuNKQs/41ZS8QoMC9SP/Fg='; frame-src https://accounts.google.com/gsi/ https://docs.google.com https://drive.google.com; connect-src 'self' https://accounts.google.com/gsi/ https://www.googleapis.com https://content.googleapis.com https://apis.google.com; img-src 'self' data: blob:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
   Cross-Origin-Opener-Policy: same-origin-allow-popups

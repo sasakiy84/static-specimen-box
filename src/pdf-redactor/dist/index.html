@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#ffffff">
+  <title>PDF黒塗り</title>
+  <script type="module" crossorigin src="./assets/index-GBWXtOlE.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-DTkMQ-iZ.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-inner">
+      <div>
+        <a class="home-link" href="../">アプリ一覧</a>
+        <h1>PDF黒塗り</h1>
+      </div>
+      <button id="download" class="button primary" type="button" disabled>黒塗り PDF を保存</button>
+    </div>
+  </header>
+  <main>
+    <input id="file-input" type="file" accept="application/pdf,.pdf" hidden>
+    <p id="error" class="message error" role="alert" hidden></p>
+    <p id="status" class="message status" role="status" hidden></p>
+    <section id="drop-zone" class="drop-zone" aria-labelledby="drop-heading">
+      <span class="document-mark" aria-hidden="true"></span>
+      <h2 id="drop-heading">PDF を開く</h2>
+      <p>ファイルをここにドラッグ＆ドロップ</p>
+      <button id="choose-file" class="button primary" type="button">ファイルを選択</button>
+      <p class="privacy-note">ファイルはこの端末で処理します。</p>
+    </section>
+
+    <section id="workspace" aria-label="PDF の編集" hidden>
+      <header class="file-bar">
+        <p id="file-name" class="file-name"></p>
+        <button id="change-file" class="button" type="button">別の PDF を開く</button>
+      </header>
+      <div class="editor">
+        <section class="document-editor" aria-label="ページのプレビュー">
+          <div class="toolbar">
+            <div class="page-controls" role="group" aria-label="ページ移動">
+              <button id="previous-page" class="button arrow" type="button" aria-label="前のページ">‹</button>
+              <label for="page-number" class="sr-only">ページ番号</label>
+              <input id="page-number" type="number" inputmode="numeric" min="1" value="1">
+              <span id="page-total"></span>
+              <button id="next-page" class="button arrow" type="button" aria-label="次のページ">›</button>
+            </div>
+            <div class="view-controls">
+              <label class="sr-only" for="zoom">表示倍率</label>
+              <select id="zoom">
+                <option value="1">ページ全体</option>
+                <option value="1.5">150%</option>
+                <option value="2">200%</option>
+                <option value="3">300%</option>
+                <option value="4">400%</option>
+              </select>
+              <div class="mode-controls" role="group" aria-label="プレビューの操作">
+                <button id="select-mode" class="button" type="button" aria-pressed="true">範囲選択</button>
+                <button id="pan-mode" class="button" type="button" aria-pressed="false">移動</button>
+              </div>
+            </div>
+          </div>
+          <div id="viewport" class="viewport">
+            <div class="viewport-content">
+              <div id="surface" class="surface" role="application" aria-label="PDF プレビュー" aria-describedby="keyboard-help" tabindex="0" hidden>
+                <canvas id="page-canvas" aria-hidden="true"></canvas>
+                <div id="masks" class="overlay" aria-hidden="true"></div>
+                <div id="draft" class="mask draft" aria-hidden="true" hidden></div>
+                <div id="cursor" class="cursor" aria-hidden="true" hidden></div>
+              </div>
+            </div>
+          </div>
+          <p id="keyboard-help" class="sr-only">矢印キーでカーソルを動かし、Enter で選択の始点と終点を指定します。Escape で選択を中止します。</p>
+        </section>
+        <aside class="selection-panel" aria-labelledby="selection-heading">
+          <div class="selection-heading">
+            <h2 id="selection-heading">黒塗り範囲</h2>
+            <span id="mask-count" role="status">0 件</span>
+          </div>
+          <p>隠したい文字や画像が余白ごと収まるように、ページ上でドラッグします。</p>
+          <ol id="mask-list" class="mask-list" aria-label="選択した黒塗り範囲"></ol>
+          <button id="undo" class="button" type="button" disabled>最後の選択を取り消す</button>
+          <p class="export-note">保存した PDF は全ページが画像になります。</p>
+        </aside>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

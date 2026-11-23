@@ -55,6 +55,18 @@ npm run dev
 
 JPEG・PNG・WebP・AVIF の静止画をブラウザ内で圧縮します。形式に合わせて圧縮方法を選び、幅と高さの割合または長辺の上限を指定できます。圧縮後のファイルサイズは KB や MB などの単位で表示します。プレビューを選ぶと、元の画像と圧縮後の画像をそれぞれ全画面で確認できます。`npm run build` で配布ファイルを `src/image-compressor/dist/` に作ります。
 
+## PDF黒塗り
+
+```sh
+cd src/pdf-redactor
+npm ci
+npm run dev
+```
+
+ページ上で黒塗り範囲を選び、別ファイルとして保存します。全ページをブラウザ内で画像化し、選択範囲を黒い画素で置き換えた画像から PDF を作ります。出力には元の文字レイヤー、フォーム、添付ファイル、文書メタデータを含めません。
+
+`npm run build` で配布ファイルを作ります。`npx playwright install chromium` のあと `npm test` を実行すると、画素の境界、回転したページ、出力ファイルの構造と黒塗り範囲を検査できます。PyMuPDF、Pillow、Tesseract の英語・日本語データがある環境では、ブラウザテストが生成した `input.pdf` を `tests/audit_export.py` に渡して、独立した文字抽出と OCR でも確認できます。
+
 ## turris-altissima
 
 ```sh

@@ -1,0 +1,20 @@
+{
+  "name": "pdf-redactor",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/prepare-pdfjs.js && vite",
+    "build": "node scripts/prepare-pdfjs.js && vite build",
+    "preview": "vite preview",
+    "test": "node --test tests/geometry.test.js && playwright test"
+  },
+  "dependencies": {
+    "pdf-lib": "1.17.1",
+    "pdfjs-dist": "6.5.438"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.1",
+    "vite": "8.3.8"
+  }
+}
