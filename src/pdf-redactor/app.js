@@ -16,6 +16,8 @@ const selectMode = byId('select-mode');
 const panMode = byId('pan-mode');
 const download = byId('download');
 const undo = byId('undo');
+const removeSelected = byId('remove-selected');
+const maskOverlay = byId('masks');
 const maskList = byId('mask-list');
 const draft = byId('draft');
 const cursor = byId('cursor');
@@ -34,6 +36,8 @@ let gesture;
 let keyboardStart;
 let keyboardPoint = { x: .5, y: .5 };
 let masks = [];
+let maskHistory = [];
+let selectedMaskId;
 let nextMaskId = 1;
 
 function setMessage(id, message = '') {
@@ -47,7 +51,8 @@ function updateControls() {
   const drafting = gesture?.kind === 'mask' || Boolean(keyboardStart);
   byId('choose-file').disabled = byId('change-file').disabled = busy;
   download.disabled = !documentPdf || !masks.length || busy || rendering || drafting;
-  undo.disabled = !masks.length || busy || drafting;
+  undo.disabled = !maskHistory.length || busy || drafting;
+  removeSelected.disabled = selectedMaskId === undefined || busy || rendering || drafting;
   previous.disabled = busy || page <= 1;
   next.disabled = busy || !documentPdf || page >= documentPdf.numPages;
   pageInput.disabled = zoom.disabled = selectMode.disabled = panMode.disabled = busy;
@@ -74,10 +79,54 @@ function positionBox(element, box) {
   element.style.height = `${(box.bottom - box.top) * 100}%`;
 }
 
+function maskNumber(id) {
+  const number = document.createElement('span');
+  number.className = 'mask-number';
+  number.textContent = String(id);
+  number.setAttribute('aria-hidden', 'true');
+  return number;
+}
+
+function syncMaskSelection() {
+  for (const overlay of maskOverlay.children) {
+    overlay.toggleAttribute('data-selected', Number(overlay.dataset.maskId) === selectedMaskId);
+  }
+  for (const row of maskList.querySelectorAll('.mask-page')) {
+    row.setAttribute('aria-pressed', String(Number(row.dataset.maskId) === selectedMaskId));
+  }
+  removeSelected.hidden = selectedMaskId === undefined;
+  if (!removeSelected.hidden) {
+    const caption = `範囲 ${selectedMaskId} を削除`;
+    const label = `選択中の${caption}`;
+    removeSelected.textContent = caption;
+    removeSelected.setAttribute('aria-label', label);
+    removeSelected.title = label;
+  }
+  updateControls();
+}
+
+function revealSelectedMask() {
+  const number = maskOverlay.querySelector(`[data-mask-id="${selectedMaskId}"] .mask-number`);
+  number?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+}
+
+function selectMask(mask, reveal = false) {
+  selectedMaskId = mask?.id;
+  clearDraft();
+  if (mask && mask.page !== page) {
+    void showPage(mask.page);
+    return;
+  }
+  syncMaskSelection();
+  if (reveal && !rendering) revealSelectedMask();
+}
+
 function drawMasks() {
-  byId('masks').replaceChildren(...masks.filter(mask => mask.page === page).map(({ box }) => {
+  maskOverlay.replaceChildren(...masks.filter(mask => mask.page === page).map(({ id, box }) => {
     const element = document.createElement('span');
     element.className = 'mask';
+    element.dataset.maskId = String(id);
+    element.append(maskNumber(id));
     positionBox(element, box);
     return element;
   }));
@@ -90,27 +139,39 @@ function drawMaskList() {
     const go = document.createElement('button');
     go.type = 'button';
     go.className = 'mask-page';
-    go.textContent = `${mask.page} ページ目 · 範囲 ${mask.id}`;
-    go.addEventListener('click', () => { if (mask.page !== page) void showPage(mask.page); });
+    go.dataset.maskId = String(mask.id);
+    go.setAttribute('aria-label', `${mask.page} ページ目 · 範囲 ${mask.id}`);
+    go.append(maskNumber(mask.id), `${mask.page} ページ目`);
+    go.addEventListener('click', () => selectMask(mask, true));
     const remove = document.createElement('button');
     remove.type = 'button';
     remove.className = 'button small';
     remove.textContent = '削除';
     remove.setAttribute('aria-label', `範囲 ${mask.id} を削除`);
     remove.addEventListener('click', () => {
+      const neighbor = row.nextElementSibling ?? row.previousElementSibling;
+      const neighborId = neighbor?.querySelector('.mask-page')?.dataset.maskId;
       removeMask(mask.id);
-      (maskList.querySelector('.mask-page') || surface).focus();
+      (maskList.querySelector(`[data-mask-id="${neighborId}"]`) ?? surface).focus();
     });
     row.append(go, remove);
     return row;
   }));
-  updateControls();
+}
+
+function renderMaskChanges() {
+  drawMasks();
+  drawMaskList();
+  syncMaskSelection();
 }
 
 function removeMask(id) {
-  masks = masks.filter(mask => mask.id !== id);
-  drawMasks();
-  drawMaskList();
+  const index = masks.findIndex(mask => mask.id === id);
+  if (index < 0) return;
+  const [mask] = masks.splice(index, 1);
+  maskHistory.push({ kind: 'remove', mask, index });
+  if (selectedMaskId === id) selectedMaskId = undefined;
+  renderMaskChanges();
   setMessage('status');
 }
 
@@ -133,14 +194,15 @@ function saveMask(start, end) {
   const bounds = surface.getBoundingClientRect();
   if ((box.right - box.left) * bounds.width < 2 || (box.bottom - box.top) * bounds.height < 2) {
     setMessage('status', '黒塗り範囲を広げるか、表示を拡大して選び直してください。');
-  } else {
-    const id = nextMaskId++;
-    masks.push({ page, id, box });
-    drawMasks();
-    drawMaskList();
-    setMessage('status');
+    updateControls();
+    return;
   }
-  updateControls();
+  const mask = { page, id: nextMaskId++, box };
+  maskHistory.push({ kind: 'add', mask, index: masks.length });
+  masks.push(mask);
+  selectedMaskId = mask.id;
+  renderMaskChanges();
+  setMessage('status');
 }
 
 async function showPage(number) {
@@ -150,6 +212,7 @@ async function showPage(number) {
   previousTask?.cancel();
   const pdf = documentPdf;
   page = number;
+  if (!masks.some(mask => mask.id === selectedMaskId && mask.page === number)) selectedMaskId = undefined;
   pageInput.value = String(page);
   pageSize = undefined;
   keyboardPoint = { x: .5, y: .5 };
@@ -157,7 +220,7 @@ async function showPage(number) {
   const hadFocus = document.activeElement === surface;
   surface.hidden = true;
   rendering = true;
-  updateControls();
+  syncMaskSelection();
   setMessage('error');
   setMessage('status', `${page} ページ目を読み込んでいます…`);
   try {
@@ -175,6 +238,8 @@ async function showPage(number) {
     sizeSurface();
     viewport.scrollTo(0, 0);
     drawMasks();
+    syncMaskSelection();
+    if (selectedMaskId !== undefined) revealSelectedMask();
     if (hadFocus) surface.focus({ preventScroll: true });
     setMessage('status');
   } catch {
@@ -219,6 +284,8 @@ async function openFiles(files) {
     documentPdf = newPdf;
     loadingTask = undefined;
     masks = [];
+    maskHistory = [];
+    selectedMaskId = undefined;
     nextMaskId = 1;
     pageInput.max = String(newPdf.numPages);
     byId('page-total').textContent = `/ ${newPdf.numPages}`;
@@ -302,7 +369,8 @@ surface.addEventListener('pointerdown', event => {
   surface.focus({ preventScroll: true });
   if (selecting) {
     const start = pointFromPointer(event);
-    gesture = { kind: 'mask', pointer: event.pointerId, start };
+    const maskId = Number(event.target.closest('[data-mask-id]')?.dataset.maskId);
+    gesture = { kind: 'mask', pointer: event.pointerId, start, maskId, x: event.clientX, y: event.clientY };
     showDraft(start, start);
   } else {
     gesture = {
@@ -327,8 +395,16 @@ surface.addEventListener('pointerup', event => {
   if (gesture?.pointer !== event.pointerId) return;
   const finished = gesture;
   clearDraft();
-  if (finished.kind === 'mask') saveMask(finished.start, pointFromPointer(event));
-  else updateControls();
+  if (finished.kind !== 'mask') {
+    updateControls();
+    return;
+  }
+  const tapDistance = event.pointerType === 'touch' ? 9 : 4;
+  if (Math.hypot(event.clientX - finished.x, event.clientY - finished.y) < tapDistance) {
+    selectMask(masks.find(mask => mask.id === finished.maskId));
+    return;
+  }
+  saveMask(finished.start, pointFromPointer(event));
 });
 for (const type of ['pointercancel', 'lostpointercapture']) {
   surface.addEventListener(type, event => {
@@ -340,11 +416,6 @@ for (const type of ['pointercancel', 'lostpointercapture']) {
 
 surface.addEventListener('keydown', event => {
   if (!selecting || rendering || opening || exporting || gesture || event.isComposing) return;
-  if (event.key === 'Escape') {
-    clearDraft();
-    updateControls();
-    return;
-  }
   if (event.key === 'Enter') {
     event.preventDefault();
     if (keyboardStart) {
@@ -373,14 +444,42 @@ surface.addEventListener('keydown', event => {
   }
 });
 
+removeSelected.addEventListener('click', () => {
+  removeMask(selectedMaskId);
+  surface.focus({ preventScroll: true });
+});
 undo.addEventListener('click', () => {
-  if (masks.length) removeMask(masks.at(-1).id);
+  const change = maskHistory.pop();
+  if (!change) return;
+  if (change.kind === 'remove') {
+    masks.splice(change.index, 0, change.mask);
+    selectedMaskId = change.mask.id;
+  } else {
+    masks.splice(change.index, 1);
+    if (selectedMaskId === change.mask.id) selectedMaskId = undefined;
+  }
+  renderMaskChanges();
+  if (change.kind === 'remove') selectMask(change.mask, true);
+  if (undo.disabled && document.activeElement === undo) surface.focus({ preventScroll: true });
+  setMessage('status');
 });
 document.addEventListener('keydown', event => {
+  if (!workspace.contains(event.target) || event.target === pageInput || event.isComposing) return;
   if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey &&
-      event.key.toLowerCase() === 'z' && !undo.disabled && event.target !== pageInput) {
+      event.key.toLowerCase() === 'z' && !undo.disabled) {
     event.preventDefault();
     undo.click();
+  } else if (event.key === 'Delete' && !removeSelected.disabled) {
+    event.preventDefault();
+    removeSelected.click();
+  } else if (event.key === 'Escape' && (keyboardStart || gesture || selectedMaskId !== undefined)) {
+    event.preventDefault();
+    if (keyboardStart || gesture) {
+      clearDraft();
+      updateControls();
+    } else {
+      selectMask(undefined);
+    }
   }
 });
 

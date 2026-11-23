@@ -132,8 +132,11 @@ test('削除した文字は抽出できず、範囲外の文字は検索でき�
   await selectBox(page, preview, rotatedBox);
   await expect(count).toHaveText('2 件');
   await expect(save).toBeEnabled();
-  await page.getByRole('button', { name: '1 ページ目 · 範囲 1' }).click();
+  const firstRange = page.getByRole('button', { name: '1 ページ目 · 範囲 1' });
+  await firstRange.click();
   await expect(preview).toHaveAccessibleName('PDF プレビュー 1 ページ目');
+  await expect(firstRange).toHaveAttribute('aria-pressed', 'true');
+  await expect(preview.locator('[data-selected] .mask-number')).toHaveText('1');
   await page.screenshot({ path: testInfo.outputPath('preview.png') });
   const downloaded = page.waitForEvent('download');
   await save.click();
@@ -171,6 +174,47 @@ test('削除した文字は抽出できず、範囲外の文字は検索でき�
   }
   expect(errors).toEqual([]);
   expect(requests.filter(request => request.method !== 'GET' || new URL(request.url).origin !== origin)).toEqual([]);
+});
+
+test('一覧とプレビューで同じ番号を選択でき、削除した範囲は元に戻せる', async ({ page }, testInfo) => {
+  await page.goto('./');
+  await openByDrop(page, await makeFixture(page));
+  const preview = page.getByRole('application', { name: 'PDF プレビュー 1 ページ目' });
+  const first = page.getByRole('button', { name: '1 ページ目 · 範囲 1' });
+  const second = page.getByRole('button', { name: '1 ページ目 · 範囲 2' });
+  const activeNumber = preview.locator('[data-selected] .mask-number');
+  await selectBox(page, preview, firstBox);
+  await selectBox(page, preview, { left: .10, top: .76, right: .44, bottom: .87 });
+  await expect(activeNumber).toHaveText('2');
+  await expect(second).toHaveAttribute('aria-pressed', 'true');
+  await page.screenshot({ path: testInfo.outputPath('matching-ranges.png') });
+
+  const zoom = page.getByRole('combobox', { name: '表示倍率' });
+  await zoom.selectOption('3');
+  await first.click();
+  await expect(activeNumber).toHaveText('1');
+  await expect(activeNumber).toBeInViewport({ ratio: 1 });
+  await second.click();
+  await expect(activeNumber).toHaveText('2');
+  await expect(activeNumber).toBeInViewport({ ratio: 1 });
+  await zoom.selectOption('1');
+
+  // PDF 上の番号をクリックしても新しい範囲は増えない。
+  await preview.locator('.mask-number').filter({ hasText: /^1$/ }).click();
+  await expect(first).toHaveAttribute('aria-pressed', 'true');
+  await expect(second).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('#mask-count')).toHaveText('2 件');
+  await preview.press('Delete');
+  await expect(first).toHaveCount(0);
+  await expect(second).toBeVisible();
+  await page.getByRole('button', { name: '元に戻す' }).click();
+  await expect(activeNumber).toHaveText('1');
+  await expect(first).toHaveAttribute('aria-pressed', 'true');
+
+  await page.getByRole('button', { name: '範囲 2 を削除', exact: true }).click();
+  await expect(second).toHaveCount(0);
+  await expect(first).toBeFocused();
+  await expect(activeNumber).toHaveText('1');
 });
 
 test('supports keyboard selection, undo, and precise zoom on a small screen', async ({ page }, testInfo) => {
@@ -214,7 +258,21 @@ test('supports keyboard selection, undo, and precise zoom on a small screen', as
   await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await expect(save).toBeEnabled();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  await preview.press('Escape');
+  const badge = preview.locator('.mask-number');
+  const area = await badge.boundingBox();
+  await touch.send('Input.dispatchTouchEvent', {
+    type: 'touchStart', touchPoints: [{ x: area.x + area.width / 2, y: area.y + area.height / 2 }],
+  });
+  await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await expect(page.getByRole('button', { name: '1 ページ目 · 範囲 2' })).toHaveAttribute('aria-pressed', 'true');
+  const quickDelete = page.getByRole('button', { name: '選択中の範囲 2 を削除' });
+  await expect(quickDelete).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('mobile.png'), fullPage: true });
+  await quickDelete.click();
+  await expect(save).toBeDisabled();
+  await page.getByRole('button', { name: '元に戻す' }).click();
+  await expect(save).toBeEnabled();
 });
 
 test('スキャン画像の文字を選ぶと、黒塗り済みの PDF を生成せずエラーを表示する', async ({ page }) => {

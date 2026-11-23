@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#ffffff">
   <title>PDF黒塗り</title>
-  <script type="module" crossorigin src="./assets/index-CWz7O6ga.js"></script>
+  <script type="module" crossorigin src="./assets/index-BB8fpoc_.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/preload-helper-DclECHGd.js">
-  <link rel="stylesheet" crossorigin href="./assets/index-DTkMQ-iZ.css">
+  <link rel="stylesheet" crossorigin href="./assets/index-JxwOw9nc.css">
 </head>
 <body>
   <header class="app-header">
@@ -46,6 +46,7 @@
               <span id="page-total"></span>
               <button id="next-page" class="button arrow" type="button" aria-label="次のページ">›</button>
             </div>
+            <button id="remove-selected" class="button" type="button" hidden disabled>削除</button>
             <div class="view-controls">
               <label class="sr-only" for="zoom">表示倍率</label>
               <select id="zoom">
@@ -71,7 +72,7 @@
               </div>
             </div>
           </div>
-          <p id="keyboard-help" class="sr-only">矢印キーでカーソルを動かし、Enter で選択の始点と終点を指定します。Escape で選択を中止します。</p>
+          <p id="keyboard-help" class="sr-only">矢印キーでカーソルを動かし、Enter で選択の始点と終点を指定します。Escape で選択を解除します。黒塗り範囲を選択した状態で Delete を押すと、その範囲を削除します。</p>
         </section>
         <aside class="selection-panel" aria-labelledby="selection-heading">
           <div class="selection-heading">
@@ -80,7 +81,7 @@
           </div>
           <p>削除したい文字が余白ごと収まるように、ページ上でドラッグします。</p>
           <ol id="mask-list" class="mask-list" aria-label="選択した黒塗り範囲"></ol>
-          <button id="undo" class="button" type="button" disabled>最後の選択を取り消す</button>
+          <button id="undo" class="button" type="button" disabled>元に戻す</button>
           <p class="export-note">範囲外の文字は検索・コピーできます。画像やスキャンは黒塗りの対象外です。</p>
         </aside>
       </div>
