@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#ffffff">
   <title>PDF黒塗り</title>
-  <script type="module" crossorigin src="./assets/index-BB8fpoc_.js"></script>
+  <script type="module" crossorigin src="./assets/index-XVICmVz9.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/preload-helper-DclECHGd.js">
-  <link rel="stylesheet" crossorigin href="./assets/index-JxwOw9nc.css">
+  <link rel="stylesheet" crossorigin href="./assets/index-MCPP19iw.css">
 </head>
 <body>
   <header class="app-header">
@@ -36,55 +36,46 @@
         <p id="file-name" class="file-name"></p>
         <button id="change-file" class="button" type="button">別の PDF を開く</button>
       </header>
-      <div class="editor">
-        <section class="document-editor" aria-label="ページのプレビュー">
-          <div class="toolbar">
-            <div class="page-controls" role="group" aria-label="ページ移動">
-              <button id="previous-page" class="button arrow" type="button" aria-label="前のページ">‹</button>
-              <label for="page-number" class="sr-only">ページ番号</label>
-              <input id="page-number" type="number" inputmode="numeric" min="1" value="1">
-              <span id="page-total"></span>
-              <button id="next-page" class="button arrow" type="button" aria-label="次のページ">›</button>
-            </div>
-            <button id="remove-selected" class="button" type="button" hidden disabled>削除</button>
-            <div class="view-controls">
-              <label class="sr-only" for="zoom">表示倍率</label>
-              <select id="zoom">
-                <option value="1">ページ全体</option>
-                <option value="1.5">150%</option>
-                <option value="2">200%</option>
-                <option value="3">300%</option>
-                <option value="4">400%</option>
-              </select>
-              <div class="mode-controls" role="group" aria-label="プレビューの操作">
-                <button id="select-mode" class="button" type="button" aria-pressed="true">範囲選択</button>
-                <button id="pan-mode" class="button" type="button" aria-pressed="false">移動</button>
-              </div>
-            </div>
+      <section class="document-editor" aria-label="ページのプレビュー">
+        <div class="toolbar">
+          <div class="page-controls" role="group" aria-label="ページ移動">
+            <button id="previous-page" class="button arrow" type="button" aria-label="前のページ">‹</button>
+            <label for="page-number" class="sr-only">ページ番号</label>
+            <input id="page-number" type="number" inputmode="numeric" min="1" value="1">
+            <span id="page-total"></span>
+            <button id="next-page" class="button arrow" type="button" aria-label="次のページ">›</button>
           </div>
-          <div id="viewport" class="viewport">
-            <div class="viewport-content">
-              <div id="surface" class="surface" role="application" aria-label="PDF プレビュー" aria-describedby="keyboard-help" tabindex="0" hidden>
-                <canvas id="page-canvas" aria-hidden="true"></canvas>
-                <div id="masks" class="overlay" aria-hidden="true"></div>
-                <div id="draft" class="mask draft" aria-hidden="true" hidden></div>
-                <div id="cursor" class="cursor" aria-hidden="true" hidden></div>
-              </div>
+          <div class="edit-controls" role="group" aria-label="黒塗り範囲の編集">
+            <button id="undo" class="button" type="button" disabled>元に戻す</button>
+            <button id="remove-selected" class="button" type="button" aria-label="選択中の範囲を削除" disabled>削除</button>
+          </div>
+          <div class="view-controls">
+            <label class="sr-only" for="zoom">表示倍率</label>
+            <select id="zoom">
+              <option value="1">ページ全体</option>
+              <option value="1.5">150%</option>
+              <option value="2">200%</option>
+              <option value="3">300%</option>
+              <option value="4">400%</option>
+            </select>
+            <div class="mode-controls" role="group" aria-label="プレビューの操作">
+              <button id="select-mode" class="button" type="button" aria-pressed="true">範囲選択</button>
+              <button id="pan-mode" class="button" type="button" aria-pressed="false">スクロール</button>
             </div>
           </div>
-          <p id="keyboard-help" class="sr-only">矢印キーでカーソルを動かし、Enter で選択の始点と終点を指定します。Escape で選択を解除します。黒塗り範囲を選択した状態で Delete を押すと、その範囲を削除します。</p>
-        </section>
-        <aside class="selection-panel" aria-labelledby="selection-heading">
-          <div class="selection-heading">
-            <h2 id="selection-heading">黒塗り範囲</h2>
-            <span id="mask-count" role="status">0 件</span>
+        </div>
+        <div id="viewport" class="viewport">
+          <div class="viewport-content">
+            <div id="surface" class="surface" role="application" aria-label="PDF プレビュー" aria-describedby="keyboard-help" tabindex="0" hidden>
+              <canvas id="page-canvas" aria-hidden="true"></canvas>
+              <div id="masks" class="overlay"></div>
+              <div id="draft" class="mask draft" aria-hidden="true" hidden></div>
+              <div id="cursor" class="cursor" aria-hidden="true" hidden></div>
+            </div>
           </div>
-          <p>削除したい文字が余白ごと収まるように、ページ上でドラッグします。</p>
-          <ol id="mask-list" class="mask-list" aria-label="選択した黒塗り範囲"></ol>
-          <button id="undo" class="button" type="button" disabled>元に戻す</button>
-          <p class="export-note">範囲外の文字は検索・コピーできます。画像やスキャンは黒塗りの対象外です。</p>
-        </aside>
-      </div>
+        </div>
+        <p id="keyboard-help" class="sr-only">矢印キーでカーソルを動かし、Enter で選択の始点と終点を指定します。Escape で選択を解除します。Tab で黒塗り範囲を選択できます。選択した範囲は矢印キーで移動、Shift と矢印キーでサイズ変更、Delete で削除できます。</p>
+      </section>
     </section>
   </main>
 </body>

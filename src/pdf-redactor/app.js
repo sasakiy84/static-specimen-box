@@ -1,5 +1,5 @@
 import './style.css';
-import { boxBetween, clamp } from './geometry.js';
+import { boxBetween, clamp, moveBox, resizeBox } from './geometry.js';
 
 const byId = id => document.getElementById(id);
 const fileInput = byId('file-input');
@@ -18,7 +18,6 @@ const download = byId('download');
 const undo = byId('undo');
 const removeSelected = byId('remove-selected');
 const maskOverlay = byId('masks');
-const maskList = byId('mask-list');
 const draft = byId('draft');
 const cursor = byId('cursor');
 
@@ -48,7 +47,7 @@ function setMessage(id, message = '') {
 
 function updateControls() {
   const busy = opening || exporting;
-  const drafting = gesture?.kind === 'mask' || Boolean(keyboardStart);
+  const drafting = (gesture && gesture.kind !== 'pan') || Boolean(keyboardStart);
   byId('choose-file').disabled = byId('change-file').disabled = busy;
   download.disabled = !documentPdf || !masks.length || busy || rendering || drafting;
   undo.disabled = !maskHistory.length || busy || drafting;
@@ -56,7 +55,7 @@ function updateControls() {
   previous.disabled = busy || page <= 1;
   next.disabled = busy || !documentPdf || page >= documentPdf.numPages;
   pageInput.disabled = zoom.disabled = selectMode.disabled = panMode.disabled = busy;
-  for (const button of maskList.querySelectorAll('button')) button.disabled = busy;
+  for (const mask of maskOverlay.children) mask.tabIndex = selecting && !busy ? 0 : -1;
   surface.toggleAttribute('data-selecting', selecting && !busy);
   surface.tabIndex = busy ? -1 : 0;
 }
@@ -79,90 +78,56 @@ function positionBox(element, box) {
   element.style.height = `${(box.bottom - box.top) * 100}%`;
 }
 
-function maskNumber(id) {
-  const number = document.createElement('span');
-  number.className = 'mask-number';
-  number.textContent = String(id);
-  number.setAttribute('aria-hidden', 'true');
-  return number;
-}
-
-function syncMaskSelection() {
+function selectMask(id) {
+  selectedMaskId = id;
   for (const overlay of maskOverlay.children) {
-    overlay.toggleAttribute('data-selected', Number(overlay.dataset.maskId) === selectedMaskId);
-  }
-  for (const row of maskList.querySelectorAll('.mask-page')) {
-    row.setAttribute('aria-pressed', String(Number(row.dataset.maskId) === selectedMaskId));
-  }
-  removeSelected.hidden = selectedMaskId === undefined;
-  if (!removeSelected.hidden) {
-    const caption = `範囲 ${selectedMaskId} を削除`;
-    const label = `選択中の${caption}`;
-    removeSelected.textContent = caption;
-    removeSelected.setAttribute('aria-label', label);
-    removeSelected.title = label;
+    overlay.setAttribute('aria-pressed', String(Number(overlay.dataset.maskId) === selectedMaskId));
   }
   updateControls();
 }
 
-function revealSelectedMask() {
-  const number = maskOverlay.querySelector(`[data-mask-id="${selectedMaskId}"] .mask-number`);
-  number?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-}
-
-function selectMask(mask, reveal = false) {
-  selectedMaskId = mask?.id;
-  clearDraft();
-  if (mask && mask.page !== page) {
-    void showPage(mask.page);
-    return;
-  }
-  syncMaskSelection();
-  if (reveal && !rendering) revealSelectedMask();
-}
-
 function drawMasks() {
   maskOverlay.replaceChildren(...masks.filter(mask => mask.page === page).map(({ id, box }) => {
-    const element = document.createElement('span');
+    const element = document.createElement('button');
+    element.type = 'button';
     element.className = 'mask';
     element.dataset.maskId = String(id);
-    element.append(maskNumber(id));
+    element.setAttribute('aria-label', '黒塗り範囲');
     positionBox(element, box);
+    for (const corner of ['nw', 'ne', 'sw', 'se']) {
+      const handle = document.createElement('span');
+      handle.className = 'resize-handle';
+      handle.dataset.corner = corner;
+      handle.setAttribute('aria-hidden', 'true');
+      element.append(handle);
+    }
     return element;
   }));
+  selectMask(selectedMaskId);
 }
 
-function drawMaskList() {
-  byId('mask-count').textContent = `${masks.length} 件`;
-  maskList.replaceChildren(...masks.map(mask => {
-    const row = document.createElement('li');
-    const go = document.createElement('button');
-    go.type = 'button';
-    go.className = 'mask-page';
-    go.dataset.maskId = String(mask.id);
-    go.setAttribute('aria-label', `${mask.page} ページ目 · 範囲 ${mask.id}`);
-    go.append(maskNumber(mask.id), `${mask.page} ページ目`);
-    go.addEventListener('click', () => selectMask(mask, true));
-    const remove = document.createElement('button');
-    remove.type = 'button';
-    remove.className = 'button small';
-    remove.textContent = '削除';
-    remove.setAttribute('aria-label', `範囲 ${mask.id} を削除`);
-    remove.addEventListener('click', () => {
-      const neighbor = row.nextElementSibling ?? row.previousElementSibling;
-      const neighborId = neighbor?.querySelector('.mask-page')?.dataset.maskId;
-      removeMask(mask.id);
-      (maskList.querySelector(`[data-mask-id="${neighborId}"]`) ?? surface).focus();
-    });
-    row.append(go, remove);
-    return row;
-  }));
+function revealSelectedMask() {
+  maskOverlay.querySelector('[aria-pressed="true"]')
+    ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 }
 
-function renderMaskChanges() {
-  drawMasks();
-  drawMaskList();
-  syncMaskSelection();
+function maskFromElement(element) {
+  return masks.find(mask => mask.id === Number(element?.dataset.maskId));
+}
+
+function commitAdjustment(mask, element, box) {
+  if (Object.keys(box).every(edge => box[edge] === mask.box[edge])) return;
+  maskHistory.push({ kind: 'edit', mask, box: mask.box });
+  mask.box = box;
+  positionBox(element, box);
+  setMessage('status');
+  updateControls();
+}
+
+function resizeMaskBox(box, corner, dx, dy, bounds) {
+  const minWidth = Math.min(box.right - box.left, 4 / bounds.width);
+  const minHeight = Math.min(box.bottom - box.top, 4 / bounds.height);
+  return resizeBox(box, corner, dx, dy, minWidth, minHeight);
 }
 
 function removeMask(id) {
@@ -171,12 +136,13 @@ function removeMask(id) {
   const [mask] = masks.splice(index, 1);
   maskHistory.push({ kind: 'remove', mask, index });
   if (selectedMaskId === id) selectedMaskId = undefined;
-  renderMaskChanges();
+  drawMasks();
   setMessage('status');
 }
 
 function clearDraft() {
   const captured = gesture?.pointer;
+  if (gesture?.kind === 'adjust') positionBox(gesture.element, gesture.mask.box);
   gesture = undefined;
   if (captured != null && surface.hasPointerCapture(captured)) surface.releasePointerCapture(captured);
   surface.removeAttribute('data-panning');
@@ -201,7 +167,7 @@ function saveMask(start, end) {
   maskHistory.push({ kind: 'add', mask, index: masks.length });
   masks.push(mask);
   selectedMaskId = mask.id;
-  renderMaskChanges();
+  drawMasks();
   setMessage('status');
 }
 
@@ -217,10 +183,10 @@ async function showPage(number) {
   pageSize = undefined;
   keyboardPoint = { x: .5, y: .5 };
   clearDraft();
-  const hadFocus = document.activeElement === surface;
+  const hadFocus = surface.contains(document.activeElement);
   surface.hidden = true;
   rendering = true;
-  syncMaskSelection();
+  updateControls();
   setMessage('error');
   setMessage('status', `${page} ページ目を読み込んでいます…`);
   try {
@@ -238,7 +204,6 @@ async function showPage(number) {
     sizeSurface();
     viewport.scrollTo(0, 0);
     drawMasks();
-    syncMaskSelection();
     if (selectedMaskId !== undefined) revealSelectedMask();
     if (hadFocus) surface.focus({ preventScroll: true });
     setMessage('status');
@@ -293,7 +258,6 @@ async function openFiles(files) {
     zoom.value = '1';
     dropZone.hidden = true;
     workspace.hidden = false;
-    drawMaskList();
     const preview = showPage(1);
     void oldPdf?.destroy().catch(() => {});
     await preview;
@@ -354,57 +318,77 @@ function setSelectMode(enabled) {
 selectMode.addEventListener('click', () => setSelectMode(true));
 panMode.addEventListener('click', () => setSelectMode(false));
 
-function pointFromPointer(event) {
-  const rect = surface.getBoundingClientRect();
-  return {
-    x: clamp((event.clientX - rect.left) / rect.width, 0, 1),
-    y: clamp((event.clientY - rect.top) / rect.height, 0, 1),
-  };
+function pointFromPointer(event, bounds, bounded = true) {
+  const x = (event.clientX - bounds.left) / bounds.width;
+  const y = (event.clientY - bounds.top) / bounds.height;
+  return bounded ? { x: clamp(x, 0, 1), y: clamp(y, 0, 1) } : { x, y };
+}
+
+function adjustmentBox(active, event) {
+  const point = pointFromPointer(event, active.bounds, false);
+  const dx = point.x - active.start.x;
+  const dy = point.y - active.start.y;
+  return active.corner
+    ? resizeMaskBox(active.mask.box, active.corner, dx, dy, active.bounds)
+    : moveBox(active.mask.box, dx, dy);
+}
+
+function moved(event, active) {
+  const threshold = active.kind === 'adjust' || event.pointerType !== 'touch' ? 3 : 8;
+  return Math.hypot(event.clientX - active.x, event.clientY - active.y) >= threshold;
 }
 
 surface.addEventListener('pointerdown', event => {
   if (!event.isPrimary || event.button !== 0 || gesture || opening || exporting || rendering) return;
   if (!selecting && event.pointerType === 'touch') return;
   clearDraft();
-  surface.focus({ preventScroll: true });
-  if (selecting) {
-    const start = pointFromPointer(event);
-    const maskId = Number(event.target.closest('[data-mask-id]')?.dataset.maskId);
-    gesture = { kind: 'mask', pointer: event.pointerId, start, maskId, x: event.clientX, y: event.clientY };
-    showDraft(start, start);
-  } else {
-    gesture = {
-      kind: 'pan', pointer: event.pointerId,
-      x: event.clientX, y: event.clientY, left: viewport.scrollLeft, top: viewport.scrollTop,
-    };
+  const { pointerId: pointer, clientX: x, clientY: y } = event;
+  if (!selecting) {
+    surface.focus({ preventScroll: true });
+    gesture = { kind: 'pan', pointer, x, y, left: viewport.scrollLeft, top: viewport.scrollTop };
     surface.setAttribute('data-panning', '');
+  } else {
+    const bounds = surface.getBoundingClientRect();
+    const element = event.target.closest('[data-mask-id]');
+    const mask = maskFromElement(element);
+    selectMask(mask?.id);
+    if (mask) {
+      element.focus({ preventScroll: true });
+      const start = pointFromPointer(event, bounds, false);
+      gesture = { kind: 'adjust', pointer, start, bounds, element, mask, corner: event.target.dataset.corner, x, y };
+    } else {
+      surface.focus({ preventScroll: true });
+      const start = pointFromPointer(event, bounds);
+      gesture = { kind: 'mask', pointer, start, bounds, x, y };
+      showDraft(start, start);
+    }
   }
-  surface.setPointerCapture(event.pointerId);
+  surface.setPointerCapture(pointer);
   event.preventDefault();
   updateControls();
 });
 surface.addEventListener('pointermove', event => {
   if (gesture?.pointer !== event.pointerId) return;
-  if (gesture.kind === 'mask') {
-    showDraft(gesture.start, pointFromPointer(event));
-  } else {
+  if (gesture.kind === 'pan') {
     viewport.scrollTo(gesture.left + gesture.x - event.clientX, gesture.top + gesture.y - event.clientY);
+  } else if (gesture.kind === 'mask') {
+    showDraft(gesture.start, pointFromPointer(event, gesture.bounds));
+  } else {
+    const box = moved(event, gesture) ? adjustmentBox(gesture, event) : gesture.mask.box;
+    positionBox(gesture.element, box);
   }
 });
 surface.addEventListener('pointerup', event => {
   if (gesture?.pointer !== event.pointerId) return;
   const finished = gesture;
   clearDraft();
-  if (finished.kind !== 'mask') {
-    updateControls();
-    return;
+  updateControls();
+  if (finished.kind === 'pan' || !moved(event, finished)) return;
+  if (finished.kind === 'adjust') {
+    commitAdjustment(finished.mask, finished.element, adjustmentBox(finished, event));
+  } else {
+    saveMask(finished.start, pointFromPointer(event, finished.bounds));
   }
-  const tapDistance = event.pointerType === 'touch' ? 9 : 4;
-  if (Math.hypot(event.clientX - finished.x, event.clientY - finished.y) < tapDistance) {
-    selectMask(masks.find(mask => mask.id === finished.maskId));
-    return;
-  }
-  saveMask(finished.start, pointFromPointer(event));
 });
 for (const type of ['pointercancel', 'lostpointercapture']) {
   surface.addEventListener(type, event => {
@@ -414,8 +398,34 @@ for (const type of ['pointercancel', 'lostpointercapture']) {
   });
 }
 
+const arrows = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] };
+
+for (const type of ['focusin', 'click']) {
+  maskOverlay.addEventListener(type, event => {
+    if (!selecting || opening || exporting || rendering) return;
+    const mask = maskFromElement(event.target.closest('[data-mask-id]'));
+    if (mask) selectMask(mask.id);
+  });
+}
+
+maskOverlay.addEventListener('keydown', event => {
+  const direction = arrows[event.key];
+  if (!direction || !selecting || opening || exporting || rendering || gesture || event.isComposing) return;
+  const mask = maskFromElement(event.target);
+  if (!mask) return;
+  event.preventDefault();
+  const bounds = surface.getBoundingClientRect();
+  const [x, y] = direction;
+  const dx = 2 * x / bounds.width;
+  const dy = 2 * y / bounds.height;
+  const box = event.shiftKey
+    ? resizeMaskBox(mask.box, 'se', dx, dy, bounds)
+    : moveBox(mask.box, dx, dy);
+  commitAdjustment(mask, event.target, box);
+});
+
 surface.addEventListener('keydown', event => {
-  if (!selecting || rendering || opening || exporting || gesture || event.isComposing) return;
+  if (event.target !== surface || !selecting || rendering || opening || exporting || gesture || event.isComposing) return;
   if (event.key === 'Enter') {
     event.preventDefault();
     if (keyboardStart) {
@@ -428,7 +438,7 @@ surface.addEventListener('keydown', event => {
       updateControls();
     }
   } else {
-    const direction = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] }[event.key];
+    const direction = arrows[event.key];
     if (!direction) return;
     event.preventDefault();
     const step = event.shiftKey ? .05 : .01;
@@ -451,20 +461,31 @@ removeSelected.addEventListener('click', () => {
 undo.addEventListener('click', () => {
   const change = maskHistory.pop();
   if (!change) return;
-  if (change.kind === 'remove') {
-    masks.splice(change.index, 0, change.mask);
-    selectedMaskId = change.mask.id;
+  const { kind, index, mask } = change;
+  if (kind === 'add') {
+    masks.splice(index, 1);
+    if (selectedMaskId === mask.id) selectedMaskId = undefined;
   } else {
-    masks.splice(change.index, 1);
-    if (selectedMaskId === change.mask.id) selectedMaskId = undefined;
+    if (kind === 'remove') masks.splice(index, 0, mask);
+    else mask.box = change.box;
+    selectedMaskId = mask.id;
+    if (mask.page !== page) {
+      void showPage(mask.page);
+      return;
+    }
   }
-  renderMaskChanges();
-  if (change.kind === 'remove') selectMask(change.mask, true);
+  const hadMaskFocus = maskOverlay.contains(document.activeElement);
+  drawMasks();
+  if (kind !== 'add') revealSelectedMask();
+  if (hadMaskFocus) {
+    const selected = maskOverlay.querySelector('[aria-pressed="true"]') ?? surface;
+    selected.focus({ preventScroll: true });
+  }
   if (undo.disabled && document.activeElement === undo) surface.focus({ preventScroll: true });
   setMessage('status');
 });
 document.addEventListener('keydown', event => {
-  if (!workspace.contains(event.target) || event.target === pageInput || event.isComposing) return;
+  if (opening || exporting || !workspace.contains(event.target) || event.target === pageInput || event.isComposing) return;
   if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey &&
       event.key.toLowerCase() === 'z' && !undo.disabled) {
     event.preventDefault();
@@ -479,6 +500,7 @@ document.addEventListener('keydown', event => {
       updateControls();
     } else {
       selectMask(undefined);
+      if (maskOverlay.contains(event.target)) surface.focus({ preventScroll: true });
     }
   }
 });

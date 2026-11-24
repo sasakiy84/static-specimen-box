@@ -122,21 +122,25 @@ test('削除した文字は抽出できず、範囲外の文字は検索でき�
 
   const preview = page.getByRole('application', { name: /PDF プレビュー/ });
   const save = page.getByRole('button', { name: '黒塗り PDF を保存' });
-  const count = page.locator('#mask-count');
   await expect(preview).toHaveAccessibleName('PDF プレビュー 1 ページ目');
   await expect(save).toBeDisabled();
-  await selectBox(page, preview, firstBox, true);
-  await expect(count).toHaveText('1 件');
+  const offset = .04;
+  const initialBox = { ...firstBox, left: firstBox.left + offset, right: firstBox.right + offset - .05 };
+  await selectBox(page, preview, initialBox, true);
+  const first = preview.getByRole('button', { name: '黒塗り範囲', pressed: true });
+  const surface = await preview.boundingBox();
+  const area = await first.boundingBox();
+  await drag(page, center(area), { dx: -offset * surface.width, dy: 0 });
+  const corner = center(await first.locator('[data-corner="se"]').boundingBox());
+  await drag(page, corner, { dx: .05 * surface.width, dy: 0 });
+
   await page.getByRole('button', { name: '次のページ' }).click();
   await expect(preview).toHaveAccessibleName('PDF プレビュー 2 ページ目');
   await selectBox(page, preview, rotatedBox);
-  await expect(count).toHaveText('2 件');
   await expect(save).toBeEnabled();
-  const firstRange = page.getByRole('button', { name: '1 ページ目 · 範囲 1' });
-  await firstRange.click();
+  await page.getByRole('button', { name: '前のページ' }).click();
   await expect(preview).toHaveAccessibleName('PDF プレビュー 1 ページ目');
-  await expect(firstRange).toHaveAttribute('aria-pressed', 'true');
-  await expect(preview.locator('[data-selected] .mask-number')).toHaveText('1');
+  await expect(preview.getByRole('button', { name: '黒塗り範囲' })).toHaveCount(1);
   await page.screenshot({ path: testInfo.outputPath('preview.png') });
   const downloaded = page.waitForEvent('download');
   await save.click();
@@ -176,45 +180,64 @@ test('削除した文字は抽出できず、範囲外の文字は検索でき�
   expect(requests.filter(request => request.method !== 'GET' || new URL(request.url).origin !== origin)).toEqual([]);
 });
 
-test('一覧とプレビューで同じ番号を選択でき、削除した範囲は元に戻せる', async ({ page }, testInfo) => {
+function center({ x, y, width, height }) {
+  return { x: x + width / 2, y: y + height / 2 };
+}
+
+async function drag(page, start, { dx, dy }) {
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(start.x + dx, start.y + dy, { steps: 7 });
+  await page.mouse.up();
+}
+
+test('黒塗りを移動・拡大し、調整や削除を取り消せる', async ({ page }, testInfo) => {
   await page.goto('./');
   await openByDrop(page, await makeFixture(page));
   const preview = page.getByRole('application', { name: 'PDF プレビュー 1 ページ目' });
-  const first = page.getByRole('button', { name: '1 ページ目 · 範囲 1' });
-  const second = page.getByRole('button', { name: '1 ページ目 · 範囲 2' });
-  const activeNumber = preview.locator('[data-selected] .mask-number');
+  const selected = preview.getByRole('button', { name: '黒塗り範囲', pressed: true });
+  const undo = page.getByRole('button', { name: '元に戻す' });
+  const save = page.getByRole('button', { name: '黒塗り PDF を保存' });
   await selectBox(page, preview, firstBox);
-  await selectBox(page, preview, { left: .10, top: .76, right: .44, bottom: .87 });
-  await expect(activeNumber).toHaveText('2');
-  await expect(second).toHaveAttribute('aria-pressed', 'true');
-  await page.screenshot({ path: testInfo.outputPath('matching-ranges.png') });
+  await expect(selected).toBeVisible();
+  await expect(selected).toHaveText('');
 
-  const zoom = page.getByRole('combobox', { name: '表示倍率' });
-  await zoom.selectOption('3');
-  await first.click();
-  await expect(activeNumber).toHaveText('1');
-  await expect(activeNumber).toBeInViewport({ ratio: 1 });
-  await second.click();
-  await expect(activeNumber).toHaveText('2');
-  await expect(activeNumber).toBeInViewport({ ratio: 1 });
-  await zoom.selectOption('1');
+  const beforeMove = await selected.boundingBox();
+  const start = center(beforeMove);
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(start.x + 25, start.y + 20);
+  await expect(save).toBeDisabled();
+  await page.keyboard.press('Escape');
+  await page.mouse.up();
+  expect(await selected.boundingBox()).toEqual(beforeMove);
 
-  // PDF 上の番号をクリックしても新しい範囲は増えない。
-  await preview.locator('.mask-number').filter({ hasText: /^1$/ }).click();
-  await expect(first).toHaveAttribute('aria-pressed', 'true');
-  await expect(second).toHaveAttribute('aria-pressed', 'false');
-  await expect(page.locator('#mask-count')).toHaveText('2 件');
-  await preview.press('Delete');
-  await expect(first).toHaveCount(0);
-  await expect(second).toBeVisible();
-  await page.getByRole('button', { name: '元に戻す' }).click();
-  await expect(activeNumber).toHaveText('1');
-  await expect(first).toHaveAttribute('aria-pressed', 'true');
+  await drag(page, start, { dx: 25, dy: 20 });
+  const beforeResize = await selected.boundingBox();
+  expect(beforeResize.x - beforeMove.x).toBeCloseTo(25, 0);
+  expect(beforeResize.y - beforeMove.y).toBeCloseTo(20, 0);
+  expect(beforeResize.width).toBeCloseTo(beforeMove.width, 0);
+  expect(beforeResize.height).toBeCloseTo(beforeMove.height, 0);
 
-  await page.getByRole('button', { name: '範囲 2 を削除', exact: true }).click();
-  await expect(second).toHaveCount(0);
-  await expect(first).toBeFocused();
-  await expect(activeNumber).toHaveText('1');
+  const corner = center(await selected.locator('[data-corner="nw"]').boundingBox());
+  await drag(page, corner, { dx: -20, dy: -16 });
+  const resized = await selected.boundingBox();
+  expect(resized.x - beforeResize.x).toBeCloseTo(-20, 0);
+  expect(resized.y - beforeResize.y).toBeCloseTo(-16, 0);
+  expect(resized.width - beforeResize.width).toBeCloseTo(20, 0);
+  expect(resized.height - beforeResize.height).toBeCloseTo(16, 0);
+  await page.screenshot({ path: testInfo.outputPath('resize-range.png') });
+
+  await undo.click();
+  expect(await selected.boundingBox()).toEqual(beforeResize);
+  await selected.press('ArrowRight');
+  expect((await selected.boundingBox()).x - beforeResize.x).toBeCloseTo(2, 0);
+  await selected.press('Shift+ArrowDown');
+  expect((await selected.boundingBox()).height - beforeResize.height).toBeCloseTo(2, 0);
+  await selected.press('Delete');
+  await expect(preview.getByRole('button', { name: '黒塗り範囲' })).toHaveCount(0);
+  await undo.click();
+  await expect(selected).toBeVisible();
 });
 
 test('supports keyboard selection, undo, and precise zoom on a small screen', async ({ page }, testInfo) => {
@@ -232,7 +255,7 @@ test('supports keyboard selection, undo, and precise zoom on a small screen', as
   await preview.press('Shift+ArrowDown');
   await expect(save).toBeDisabled();
   await preview.press('Escape');
-  await expect(page.locator('#mask-count')).toHaveText('0 件');
+  await expect(preview.getByRole('button', { name: '黒塗り範囲' })).toHaveCount(0);
   await preview.press('Enter');
   await preview.press('Shift+ArrowRight');
   await preview.press('Shift+ArrowDown');
@@ -241,8 +264,8 @@ test('supports keyboard selection, undo, and precise zoom on a small screen', as
   await preview.press('Control+z');
   await expect(save).toBeDisabled();
   await page.getByRole('combobox', { name: '表示倍率' }).selectOption('2');
-  await page.getByRole('button', { name: '移動', exact: true }).click();
-  await expect(page.getByRole('button', { name: '移動', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'スクロール', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'スクロール', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('combobox', { name: '表示倍率' }).selectOption('1');
   await page.getByRole('button', { name: '範囲選択' }).click();
   await preview.scrollIntoViewIfNeeded();
@@ -259,14 +282,25 @@ test('supports keyboard selection, undo, and precise zoom on a small screen', as
   await expect(save).toBeEnabled();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
   await preview.press('Escape');
-  const badge = preview.locator('.mask-number');
-  const area = await badge.boundingBox();
+  const region = preview.getByRole('button', { name: '黒塗り範囲' });
+  const centerPoint = center(await region.boundingBox());
   await touch.send('Input.dispatchTouchEvent', {
-    type: 'touchStart', touchPoints: [{ x: area.x + area.width / 2, y: area.y + area.height / 2 }],
+    type: 'touchStart', touchPoints: [centerPoint],
   });
   await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-  await expect(page.getByRole('button', { name: '1 ページ目 · 範囲 2' })).toHaveAttribute('aria-pressed', 'true');
-  const quickDelete = page.getByRole('button', { name: '選択中の範囲 2 を削除' });
+  await expect(region).toHaveAttribute('aria-pressed', 'true');
+  const corner = center(await region.locator('[data-corner="se"]').boundingBox());
+  const beforeResize = await region.boundingBox();
+  await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [corner] });
+  await touch.send('Input.dispatchTouchEvent', {
+    type: 'touchMove', touchPoints: [{ x: corner.x + 22, y: corner.y + 17 }],
+  });
+  await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  const resized = await region.boundingBox();
+  expect(resized.width - beforeResize.width).toBeCloseTo(22, 0);
+  expect(resized.height - beforeResize.height).toBeCloseTo(17, 0);
+
+  const quickDelete = page.getByRole('button', { name: '選択中の範囲を削除' });
   await expect(quickDelete).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('mobile.png'), fullPage: true });
   await quickDelete.click();
