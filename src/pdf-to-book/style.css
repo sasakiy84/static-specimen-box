@@ -1,0 +1,47 @@
+:root {
+  color-scheme: light;
+  --ink: #17202a;
+  --muted: #4d5764;
+  --accent: #23554c;
+  --line: #cdd7d3;
+  font: 16px/1.65 system-ui, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+  color: var(--ink);
+  background: #fff;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; }
+main { width: min(100% - 36px, 680px); margin: clamp(24px, 8vh, 72px) auto; }
+header { margin-bottom: 30px; }
+header p { margin: 4px 0 0; color: var(--muted); }
+a { color: var(--accent); text-underline-offset: .18em; }
+.home { font-size: .875rem; }
+h1 { margin: 6px 0 0; font-size: clamp(1.9rem, 6vw, 2.75rem); line-height: 1.2; letter-spacing: -.035em; }
+h2 { margin: 0 0 12px; font-size: 1.2rem; }
+fieldset { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; border: 0; padding: 0; margin: 0 0 14px; min-width: 0; }
+label { display: grid; gap: 4px; font-size: .9rem; font-weight: 650; }
+select, input, .button {
+  font: inherit; color: inherit; border: 1px solid #9aa9a3; border-radius: 6px;
+  background: #fff; padding: 8px 12px; min-height: 42px; min-width: 0;
+}
+select, input { width: 100%; }
+.button { display: inline-flex; align-items: center; justify-content: center; cursor: pointer; font-weight: 650; text-decoration: none; }
+.button:disabled { cursor: default; opacity: .55; }
+.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+#drop { padding: 28px 16px; text-align: center; border: 1px dashed var(--accent); border-radius: 8px; }
+#drop.dragging { background: #edf5f2; outline: 2px solid var(--accent); outline-offset: -2px; }
+#drop p, #details, #result-details { margin: 12px 0 0; color: var(--muted); font-size: .9rem; }
+#progress-panel, #results { margin-top: 18px; padding: 16px; border: 1px solid var(--line); border-radius: 8px; }
+#progress-panel p { margin: 0; }
+.filename { overflow-wrap: anywhere; font-weight: 650; }
+progress { width: 100%; accent-color: var(--accent); }
+.progress-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+#downloads { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+#error { color: #871e23; overflow-wrap: anywhere; }
+footer { margin-top: 24px; font-size: .875rem; color: var(--muted); }
+summary { cursor: pointer; }
+@media (max-width: 460px) {
+  fieldset { grid-template-columns: 1fr; gap: 8px; }
+  #drop { padding-block: 22px; }
+}

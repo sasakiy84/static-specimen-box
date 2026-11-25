@@ -1,0 +1,43 @@
+{
+  "layout": {
+    "parts": [
+      "layout-1.bin",
+      "layout-2.bin"
+    ],
+    "sha256": "f9a41c8453dd687f370bee199fd6d47ecf583cc14f1d839a0b416db39b356e8c",
+    "bytes": 40280965
+  },
+  "short": {
+    "parts": [
+      "short-1.bin",
+      "short-2.bin"
+    ],
+    "sha256": "063ec5b3201bce79d56c3ad73b5726cf76ec6a82f42e11a89466ae683755296c",
+    "bytes": 36738502
+  },
+  "medium": {
+    "parts": [
+      "medium-1.bin",
+      "medium-2.bin"
+    ],
+    "sha256": "d3dd9e7733aeff5c9f50687c7da6e8d01915a0bf07cfbefe1d9ac58241c61471",
+    "bytes": 37808553
+  },
+  "long": {
+    "parts": [
+      "long-1.bin",
+      "long-2.bin",
+      "long-3.bin"
+    ],
+    "sha256": "06462b0dbd5b0b8508545c8c3d485cf20dbf4ffa652fe145e69c9e7457080602",
+    "bytes": 42588187
+  },
+  "table": {
+    "parts": [
+      "table-1.bin",
+      "table-2.bin"
+    ],
+    "sha256": "fc26e20e0ece97be0d03b495481c33a3982f268966920297061b8c90215cdefa",
+    "bytes": 28483157
+  }
+}

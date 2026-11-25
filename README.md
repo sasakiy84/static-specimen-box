@@ -67,6 +67,19 @@ npm run dev
 
 `npm run build` で配布ファイルを作ります。`npx playwright install chromium` のあと `npm test` を実行すると、範囲外の文字の保持、指定した文字の削除、回転したページ、対応外の PDF の処理を確認できます。PyMuPDF、Pillow、Tesseract の英語データがある環境では、ブラウザテストが生成した `input.pdf` を `tests/audit_export.py` に渡して、独立した文字抽出、黒塗りの描画、OCR でも確認できます。
 
+## PDFから本へ
+
+```sh
+cd src/pdf-to-book
+npm ci
+npm run dev
+```
+
+PDFを選ぶと、NDLOCR-Lite v2.0.0を使って端末内で読み取り、MarkdownとEPUBを生成します。図版を両形式に収録し、表はMarkdownでセルを復元して、EPUBでは画像として収録します。ルビの読みはMarkdownでは全角括弧、EPUBではルビとして出力します。構造を判定できない表はMarkdownでも画像になります。
+
+モデルとWebAssemblyはサイト自身が配信します。NDL公式モデル（基本約157 MB、表構造用約28 MB）の分割ファイルを `src/pdf-to-book/models/` に収録しています。ブラウザは必要なモデルを組み立て、SHA-256で検証してからキャッシュします。モデルの準備と配布用ファイルの生成は `npm run build`、テストは `npm test` で実行できます。
+
+
 ## turris-altissima
 
 ```sh

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="PDFを端末内でOCRし、ルビや図表を含むMarkdownとEPUBに変換します。">
+  <title>PDFから本へ</title>
+  <script type="module" crossorigin src="./assets/index-C42xsnvu.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-DeFSuCiM.css">
+</head>
+<body>
+  <main>
+    <header>
+      <a class="home" href="../">アプリ一覧</a>
+      <h1>PDFから本へ</h1>
+      <p>スキャンしたPDFを、MarkdownとEPUBに。</p>
+    </header>
+    <form id="options">
+      <fieldset id="settings">
+        <label>書き出し形式
+          <select name="format">
+            <option value="both">Markdown ＋ EPUB</option>
+            <option value="markdown">Markdown</option>
+            <option value="epub">EPUB</option>
+          </select>
+        </label>
+        <label>ページ範囲
+          <input name="pages" type="text" placeholder="全ページ（例 1-3, 5）" autocomplete="off">
+        </label>
+      </fieldset>
+    </form>
+    <input id="file" type="file" accept="application/pdf,.pdf" hidden>
+    <section id="drop" aria-label="PDFを開く">
+      <h2>PDFをドロップ</h2>
+      <button id="choose" class="button primary" type="button">ファイルを選択</button>
+      <p>ファイルは端末内で処理します。初回はOCRモデルを取得します。</p>
+    </section>
+    <p id="error" role="alert" hidden></p>
+    <section id="progress-panel" aria-label="変換の進み具合" hidden>
+      <p id="file-name" class="filename"></p>
+      <p id="status" role="status"></p>
+      <progress id="progress" aria-label="変換の進捗"></progress>
+      <div class="progress-footer">
+        <p id="details"></p>
+        <button id="cancel" class="button" type="button">中止</button>
+      </div>
+    </section>
+    <section id="results" aria-labelledby="result-title" hidden>
+      <h2 id="result-title">ダウンロード</h2>
+      <p id="result-details"></p>
+      <div id="downloads"></div>
+    </section>
+    <footer>
+      <details>
+        <summary>使用モデルとライセンス</summary>
+        <p>国立国会図書館「NDLOCR-Lite v2.0.0」のモデルと文字リストを使用しています。ブラウザ向けに推論と後処理を実装しています。</p>
+        <p><a href="./licenses/NDLOCR-Lite.txt">NDLOCR-Lite（CC BY 4.0）</a> ·
+          <a href="./licenses/DINOv3.md">DINOv3</a> ·
+          <a href="./licenses/ONNX-Runtime.txt">ONNX Runtime</a> ·
+          <a href="./licenses/ONNX-Runtime-Notices.txt">ONNX Runtime の付属ライセンス</a> ·
+          <a href="./THIRD-PARTY-NOTICES.md">その他のライブラリ</a></p>
+      </details>
+    </footer>
+  </main>
+</body>
+</html>

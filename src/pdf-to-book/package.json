@@ -1,0 +1,25 @@
+{
+  "name": "pdf-to-book",
+  "version": "1.0.0",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "node --test tests/unit.test.js && playwright test",
+    "dev": "node scripts/prepare.mjs && vite",
+    "build": "node scripts/prepare.mjs && vite build",
+    "preview": "vite preview"
+  },
+  "type": "module",
+  "dependencies": {
+    "fflate": "0.8.3",
+    "onnxruntime-web": "1.31.1",
+    "pdfjs-dist": "6.5.438"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.1",
+    "pdf-lib": "1.17.1",
+    "vite": "8.3.8"
+  },
+  "private": true
+}
