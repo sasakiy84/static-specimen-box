@@ -14,6 +14,7 @@ const actions = byId('downloads');
 const titleField = byId('file-name');
 const assets = new URL('./', document.baseURI);
 let active;
+let preview;
 let downloadUrls = [];
 
 function setProgress(message, detail = '', value, total) {
@@ -43,7 +44,7 @@ function addDownload(name, label, data, type) {
   actions.append(link);
 }
 
-function processImage(worker, image, layer, { tables, useGpu, signal, page, index, total }) {
+function processImage(worker, image, layer, { tables, includeRuby, useGpu, signal, page, index, total }) {
   return new Promise((resolve, reject) => {
     const clean = () => {
       worker.removeEventListener('message', receive);
@@ -72,7 +73,7 @@ function processImage(worker, image, layer, { tables, useGpu, signal, page, inde
     worker.addEventListener('error', fail);
     signal.addEventListener('abort', cancel, { once: true });
     setProgress(`${page}ページ目を読み取っています…`, `${index + 1} / ${total} ページ`, index, total);
-    worker.postMessage({ image, layer, tables, useGpu, assets: assets.href }, [image]);
+    worker.postMessage({ image, layer, tables, includeRuby, useGpu, assets: assets.href }, [image]);
   });
 }
 
@@ -92,6 +93,7 @@ async function convert(file) {
   const markdown = settings.get('format') !== 'epub';
   const epub = settings.get('format') !== 'markdown';
   const preferPdfText = settings.has('prefer-pdf-text');
+  const includeRuby = settings.has('include-ruby');
   const useGpu = settings.has('webgpu');
   byId('choose').disabled = true;
   byId('settings').disabled = true;
@@ -99,21 +101,28 @@ async function convert(file) {
   progressPanel.hidden = false;
   setProgress('PDFを読み込んでいます…');
   let pdfTask, worker, pendingPage;
+  let previewOwnsPdf = false;
   try {
+    const previousPreview = preview;
+    preview = undefined;
+    await previousPreview?.destroy().catch(() => {});
     if (!globalThis.OffscreenCanvas || !globalThis.Worker || !globalThis.crypto?.subtle) {
       throw new Error('お使いのブラウザでは端末内OCRを実行できません。');
     }
-    const [{ openPdf, pageNumbers, renderPage }, { createEpub, createMarkdown }] = await Promise.all([
-      import('./pdf.js'), import('./exports.js'),
+    const [{ openPdf, pageNumbers, renderPage }, { createEpub, createMarkdown }, { PdfPreview }] = await Promise.all([
+      import('./pdf.js'), import('./exports.js'), import('./preview.js'),
     ]);
     const bytes = new Uint8Array(await file.arrayBuffer());
     signal.throwIfAborted();
     pdfTask = openPdf(bytes, assets);
-    const abortPdf = () => { void pdfTask.destroy().catch(() => {}); };
+    const abortPdf = () => { if (!previewOwnsPdf) void pdfTask.destroy().catch(() => {}); };
     signal.addEventListener('abort', abortPdf, { once: true });
     signal.throwIfAborted();
     const pdf = await pdfTask.promise;
+    signal.throwIfAborted();
     const numbers = pageNumbers(String(settings.get('pages') ?? ''), pdf.numPages);
+    preview = new PdfPreview(byId('pdf-preview'), { pdf, pdfTask, filename: file.name, numbers });
+    previewOwnsPdf = true;
     const metadata = await pdf.getMetadata().catch(() => null);
     const basename = file.name.replace(/\.pdf$/i, '') || 'document';
     const title = metadata?.info?.Title?.trim() || basename;
@@ -133,10 +142,12 @@ async function convert(file) {
       if (!prepared.result) throw prepared.error;
       const { image, layer } = prepared.result;
       const ocr = processImage(worker, image, layer, {
-        tables: markdown, useGpu, signal, page: number, index, total: numbers.length,
+        tables: markdown, includeRuby, useGpu, signal, page: number, index, total: numbers.length,
       });
       if (index + 1 < numbers.length && !signal.aborted) pendingPage = preparePage(numbers[index + 1]);
-      pages.push({ number, ...await ocr });
+      const { preview: layout, ...page } = await ocr;
+      preview.addPage(number, layout);
+      pages.push({ number, ...page });
     }
     worker.terminate();
     if (!pages.some(page => page.blocks.length)) throw new Error('選んだページから文字や図表を読み取れませんでした。');
@@ -167,9 +178,10 @@ async function convert(file) {
     }
   } finally {
     worker?.terminate();
-    await pdfTask?.destroy().catch(() => {});
+    if (!previewOwnsPdf) await pdfTask?.destroy().catch(() => {});
     const unusedPage = await pendingPage;
     unusedPage?.result?.image.close();
+    preview?.finish();
     progressPanel.hidden = true;
     active = undefined;
     byId('choose').disabled = false;

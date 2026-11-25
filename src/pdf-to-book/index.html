@@ -31,6 +31,10 @@
           PDFに埋め込まれた文字を優先する
         </label>
         <label class="checkbox-option">
+          <input name="include-ruby" type="checkbox" autocomplete="off">
+          ルビを出力する
+        </label>
+        <label class="checkbox-option">
           <input name="webgpu" type="checkbox">
           レイアウト検出にWebGPUを使う（試験的）
         </label>
@@ -56,6 +60,32 @@
       <h2 id="result-title">ダウンロード</h2>
       <p id="result-details"></p>
       <div id="downloads"></div>
+    </section>
+    <section id="pdf-preview" aria-labelledby="preview-title" hidden>
+      <h2 id="preview-title">PDFプレビュー</h2>
+      <p id="preview-filename" class="filename"></p>
+      <div class="preview-toolbar">
+        <form id="preview-navigation" aria-label="プレビューのページ移動">
+          <button id="preview-prev" class="button" type="button" aria-label="前のページ">‹</button>
+          <input id="preview-page" aria-label="プレビューのページ番号" type="number" min="1" step="1" required>
+          <span id="preview-total"></span>
+          <button id="preview-next" class="button" type="button" aria-label="次のページ">›</button>
+        </form>
+        <label class="preview-toggle"><input id="preview-regions" type="checkbox" checked>解析枠を表示</label>
+      </div>
+      <p id="preview-status" role="status"></p>
+      <ul id="preview-legend" aria-label="検出ラベルの凡例" hidden></ul>
+      <label id="preview-picker" hidden>検出領域
+        <select id="preview-region"></select>
+      </label>
+      <div id="preview-frame" class="preview-frame" hidden>
+        <div id="preview-raster"></div>
+        <div id="preview-overlay" aria-hidden="true"></div>
+        <div id="preview-tooltip" class="preview-tooltip" hidden>
+          <strong id="preview-label"></strong>
+          <span id="preview-text"></span>
+        </div>
+      </div>
     </section>
     <footer>
       <details>

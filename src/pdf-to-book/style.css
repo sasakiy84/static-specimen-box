@@ -41,6 +41,33 @@ progress { width: 100%; accent-color: var(--accent); }
 .progress-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 #downloads { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 #error { color: #871e23; overflow-wrap: anywhere; }
+#pdf-preview { margin-top: 26px; }
+#preview-filename, #preview-status { margin: 0 0 10px; color: var(--muted); font-size: .875rem; }
+.preview-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; }
+#preview-navigation { display: flex; align-items: center; gap: 6px; }
+#preview-navigation button { min-width: 42px; padding: 2px 10px; font-size: 1.25rem; }
+#preview-page { width: 5ch; min-width: 64px; padding: 6px 8px; text-align: center; }
+#preview-page::-webkit-inner-spin-button { appearance: none; }
+#preview-page { appearance: textfield; }
+#preview-total { font-variant-numeric: tabular-nums; }
+.preview-toggle { display: flex; align-items: center; gap: 8px; }
+.preview-toggle input { width: 17px; height: 17px; min-height: 0; margin: 0; accent-color: var(--accent); }
+#preview-status { margin-top: 10px; }
+#preview-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0 0 10px; padding: 0; list-style: none; font-size: .8rem; }
+#preview-legend li { display: inline-flex; align-items: center; gap: 5px; }
+.preview-swatch { width: .65rem; height: .65rem; border: 1px solid currentColor; border-radius: 2px; }
+#preview-picker { margin-bottom: 12px; }
+.preview-frame { position: relative; isolation: isolate; width: fit-content; max-width: 100%; margin: 12px auto 0; box-shadow: 0 0 0 1px var(--line); }
+#preview-raster canvas { display: block; max-width: 100%; max-height: min(840px, 83vh); width: auto; height: auto; }
+#preview-overlay { position: absolute; inset: 0; overflow: hidden; }
+.preview-tooltip {
+  position: absolute; z-index: 1; pointer-events: none; width: max-content;
+  max-width: min(320px, calc(100% - 16px)); border-radius: 5px; padding: 6px 10px;
+  background: #17202a; color: white; font-size: .8rem; line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.preview-tooltip strong, .preview-tooltip span { display: block; }
+.preview-tooltip span { white-space: pre-wrap; }
 footer { margin-top: 24px; font-size: .875rem; color: var(--muted); }
 summary { cursor: pointer; }
 @media (max-width: 460px) {

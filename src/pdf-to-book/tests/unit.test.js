@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { strFromU8, unzipSync } from 'fflate';
-import { arrangePage, attachRuby, buildTable, charactersOf, inlineText, readingOrder } from '../layout.js';
+import { arrangePage, attachRuby, buildTable, charactersOf, inlineText, readingOrder, withoutPageFurniture } from '../layout.js';
 import { createEpub, createMarkdown } from '../exports.js';
 
 test('横書きのルビは重なっている熟語にまとめて付く', () => {
@@ -19,6 +19,28 @@ test('縦書きのルビは紙面で最も近い列に付く', () => {
   attachRuby(lines, [{ text: 'としょかん', box: [87, 0, 98, 58] }]);
   assert.deepEqual(inlineText(lines[1]), [{ text: '図書館', ruby: 'としょかん' }, { text: 'へ' }]);
   assert.deepEqual(readingOrder(lines, true), [lines[1], lines[0]]);
+});
+
+test('本文と柱をまたぐ文字列から柱に対応する部分だけを除く', () => {
+  const horizontal = [{ text: '本文柱本文', box: [0, 10, 50, 20], vertical: false }];
+  const vertical = [{ text: '本文柱本文', box: [10, 0, 20, 50], vertical: true }];
+  assert.deepEqual(withoutPageFurniture(horizontal, [[20, 11, 30, 19]]), [
+    { text: '本文', box: [0, 10, 20, 20], vertical: false },
+    { text: '本文', box: [30, 10, 50, 20], vertical: false },
+  ]);
+  assert.deepEqual(withoutPageFurniture(vertical, [[11, 20, 19, 30]]), [
+    { text: '本文', box: [10, 0, 20, 20], vertical: true },
+    { text: '本文', box: [10, 30, 20, 50], vertical: true },
+  ]);
+});
+
+test('ノンブルと同じ数字や領域の端にわずかに重なる文字を残す', () => {
+  const runs = [
+    { text: '19', box: [0, 90, 20, 110], vertical: false },
+    { text: '19', box: [60, 90, 80, 110], vertical: false },
+    { text: '注', box: [15, 90, 30, 110], vertical: false },
+  ];
+  assert.deepEqual(withoutPageFurniture(runs, [[0, 93, 20, 108]]), runs.slice(1));
 });
 
 function row(text, box, vertical = false, label = 1) {

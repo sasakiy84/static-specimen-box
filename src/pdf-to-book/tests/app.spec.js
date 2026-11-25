@@ -4,7 +4,7 @@ import { PDFDocument, StandardFonts } from 'pdf-lib';
 import { strFromU8, unzipSync } from 'fflate';
 
 async function fixture(page) {
-  const image = await page.evaluate(() => {
+  const images = await page.evaluate(() => {
     const image = document.createElement('canvas');
     image.width = 1180;
     image.height = 1520;
@@ -16,7 +16,7 @@ async function fixture(page) {
     draw.fillText('Sample Document', 105, 120);
     draw.font = '31px serif';
     draw.fillText('This sample verifies browser optical character recognition.', 105, 210);
-    draw.fillText('The complete document is processed on this device.', 105, 262);
+    draw.fillText('8642 records are listed in the archive.', 105, 262);
     draw.font = '20px serif';
     draw.fillText('としょかん', 110, 315);
     draw.font = '36px serif';
@@ -44,17 +44,34 @@ async function fixture(page) {
     draw.fill();
     draw.fillStyle = '#000';
     draw.fillText('Figure 1. Mountain landscape', 112, 1230);
-    return image.toDataURL('image/png');
+    draw.font = '20px serif';
+    draw.fillText('8642', 570, 1465);
+    draw.fillText('Reference 2013.1', 860, 1465);
+    const first = image.toDataURL('image/png');
+    draw.fillStyle = 'white';
+    draw.fillRect(0, 0, image.width, image.height);
+    draw.fillStyle = '#000';
+    draw.font = '40px serif';
+    draw.fillText('A second page follows the first in the export.', 100, 200);
+    return [first, image.toDataURL('image/png')];
   });
   const pdf = await PDFDocument.create();
   pdf.setTitle('OCR example');
-  const main = pdf.addPage([590, 760]);
-  main.drawImage(await pdf.embedPng(image), { x: 0, y: 0, width: 590, height: 760 });
-  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  for (const image of images) {
+    const page = pdf.addPage([590, 760]);
+    page.drawImage(await pdf.embedPng(image), { x: 0, y: 0, width: 590, height: 760 });
+  }
+  const scan = Buffer.from(await pdf.save());
+  const textPdf = await PDFDocument.load(scan);
+  const [main] = textPdf.getPages();
+  const font = await textPdf.embedFont(StandardFonts.Helvetica);
   main.drawText('The embedded text layer is the selected source.', { x: 53, y: 655, size: 15, font, opacity: 0 });
-  const text = pdf.addPage([590, 760]);
-  text.drawText('A page with embedded text remains editable.', { x: 50, y: 660, size: 20, font });
-  return Buffer.from(await pdf.save());
+  const serif = await textPdf.embedFont(StandardFonts.TimesRoman);
+  for (const [text, x] of [['8642', 285], ['Reference 2013.1', 430]]) {
+    main.drawText(text, { x, y: 27.5, size: 10, font: serif, opacity: 0 });
+  }
+  main.drawText('Unclassified margin note.', { x: 470, y: 728, size: 10, font, opacity: 0 });
+  return { scan, withText: Buffer.from(await textPdf.save()) };
 }
 
 async function download(page, name, path) {
@@ -72,7 +89,7 @@ function figureImages(archive, chapters) {
   ));
 }
 
-test('文字レイヤーとOCRを切り替えても、図表の切り出しとキャプションを維持する', async ({ page }, info) => {
+test('文字レイヤーとOCRの両方で柱とページ番号を除き、本文と図表を残す', async ({ page }, info) => {
   const outside = [];
   const modelRequests = [];
   page.on('request', request => {
@@ -82,22 +99,28 @@ test('文字レイヤーとOCRを切り替えても、図表の切り出しと�
   });
   await page.goto('./');
   expect(await page.evaluate(() => crossOriginIsolated)).toBe(true);
-  const pdf = await fixture(page);
+  const { scan, withText } = await fixture(page);
   const input = page.locator('#file');
   const preferText = page.getByRole('checkbox', { name: 'PDFに埋め込まれた文字を優先する' });
+  const includeRuby = page.getByRole('checkbox', { name: 'ルビを出力する' });
+  await expect(includeRuby).not.toBeChecked();
   await expect(preferText).toBeChecked();
   await preferText.uncheck();
-  await input.setInputFiles({ name: 'sample.pdf', mimeType: 'application/pdf', buffer: pdf });
+  await input.setInputFiles({ name: 'sample.pdf', mimeType: 'application/pdf', buffer: scan });
   await expect(page.getByRole('region', { name: 'ダウンロード' })).toBeVisible({ timeout: 105_000 });
   const epub = unzipSync(await download(page, 'EPUB', info.outputPath('sample.epub')));
   const chapters = Object.entries(epub).filter(([name]) => name.includes('/chapter-')).map(([, bytes]) => strFromU8(bytes)).join('');
   expect(chapters).toContain('Sample Document');
   expect(chapters).toMatch(/browser optical character recognition/i);
-  expect(chapters).toMatch(/embedded text remains editable/i);
-  expect(chapters.indexOf('Sample Document')).toBeLessThan(chapters.search(/embedded text remains editable/i));
+  expect(chapters).toMatch(/A second page follows the first in the export/i);
+  expect(chapters.indexOf('Sample Document')).toBeLessThan(chapters.search(/A second page follows the first/i));
+  expect(chapters).toMatch(/8642 records are listed/i);
+  expect(chapters.match(/8642/g)).toHaveLength(1);
+  expect(chapters).not.toMatch(/Reference\s*2013/i);
   expect(chapters).not.toContain('The embedded text layer is the selected source.');
   expect(chapters).toContain('<figure>');
-  expect(chapters).toMatch(/<ruby>図書館<rp>（<\/rp><rt>とし[ょよ]かん<\/rt>/);
+  expect(chapters).toContain('図書館の資料');
+  expect(chapters).not.toMatch(/<ruby>|とし[ょよ]かん/);
   const figures = figureImages(epub, chapters);
   expect([...figures.keys()]).toEqual(['Table 1. Archival holdings', 'Figure 1. Mountain landscape']);
   for (const image of figures.values()) {
@@ -105,11 +128,24 @@ test('文字レイヤーとOCRを切り替えても、図表の切り出しと�
     expect(dimensions.getUint32(16)).toBeLessThan(590 * 2.5);
     expect(dimensions.getUint32(20)).toBeLessThan(760 * 2.5 / 2);
   }
+  const preview = page.getByRole('region', { name: 'PDFプレビュー' });
+  const overlay = preview.locator('#preview-overlay .konvajs-content');
+  const bounds = await overlay.boundingBox();
+  await overlay.hover({ position: { x: bounds.width * .24, y: bounds.height * .067 } });
+  await expect(preview.locator('#preview-label')).toHaveText('見出し · OCR');
+  await expect(preview.locator('#preview-text')).toHaveText('Sample Document');
+  await preview.screenshot({ path: info.outputPath('pdf-preview.png') });
+  const rubyRegion = preview.getByRole('option', { name: /ルビ · とし[ょよ]かん/ });
+  await preview.getByRole('combobox', { name: '検出領域' }).selectOption({ label: await rubyRegion.textContent() });
+  await expect(preview.locator('#preview-text')).toHaveText(/とし[ょよ]かん/);
   const markdown = unzipSync(await download(page, 'Markdown ＋ 画像', info.outputPath('sample-markdown.zip')));
   const document = strFromU8(markdown['document.md']);
   expect(document).toContain('Sample Document');
+  expect(document.match(/8642/g)).toHaveLength(1);
+  expect(document).not.toMatch(/Reference\s*2013/i);
   expect(document).toContain('Table 1.');
-  expect(document).toMatch(/図書館（とし[ょよ]かん）/);
+  expect(document).toContain('図書館の資料');
+  expect(document).not.toMatch(/とし[ょよ]かん/);
   expect(document.match(/Figure 1\./g)).toHaveLength(2);
   expect(document).toMatch(/\|\s*Material\s*\||<table>/i);
   expect(modelRequests.length).toBeGreaterThan(0);
@@ -117,25 +153,74 @@ test('文字レイヤーとOCRを切り替えても、図表の切り出しと�
   modelRequests.length = 0;
   await page.reload();
   await expect(preferText).toBeChecked();
+  await includeRuby.check();
   await page.getByRole('checkbox', { name: 'レイアウト検出にWebGPUを使う（試験的）' }).check();
   await page.locator('input[name="pages"]').fill('1');
-  await page.locator('select[name="format"]').selectOption('epub');
-  await input.setInputFiles({ name: 'sample.pdf', mimeType: 'application/pdf', buffer: pdf });
+  await input.setInputFiles({ name: 'sample.pdf', mimeType: 'application/pdf', buffer: withText });
   await expect(page.getByRole('link', { name: 'EPUB', exact: true })).toBeVisible({ timeout: 45_000 });
   const textEpub = unzipSync(await download(page, 'EPUB', info.outputPath('prefer-pdf-text.epub')));
   const textChapters = Object.entries(textEpub).filter(([name]) => name.includes('/chapter-'))
     .map(([, bytes]) => strFromU8(bytes)).join('');
   expect(textChapters).toContain('The embedded text layer is the selected source.');
+  expect(textChapters).toContain('Sample Document');
+  expect(textChapters).toContain('Unclassified margin note.');
+  expect(textChapters).toMatch(/8642 records are listed/i);
+  expect(textChapters.match(/8642/g)).toHaveLength(1);
+  expect(textChapters).not.toMatch(/Reference\s*2013/i);
   expect(textChapters).not.toMatch(/browser optical character recognition/i);
-  expect(textChapters).toMatch(/図書館/);
+  expect(textChapters).toMatch(/<ruby>図書館<rp>（<\/rp><rt>とし[ょよ]かん<\/rt>/);
   const textFigures = figureImages(textEpub, textChapters);
   expect([...textFigures.keys()]).toEqual([...figures.keys()]);
   for (const [caption, image] of figures) {
     expect(Buffer.from(textFigures.get(caption))).toEqual(Buffer.from(image));
   }
+  const textMarkdown = unzipSync(await download(page, 'Markdown ＋ 画像', info.outputPath('prefer-pdf-text-markdown.zip')));
+  const textDocument = strFromU8(textMarkdown['document.md']);
+  expect(textDocument).toMatch(/図書館（とし[ょよ]かん）/);
+  expect(textDocument).toContain('Unclassified margin note.');
+  expect(textDocument.match(/8642/g)).toHaveLength(1);
+  expect(textDocument).not.toMatch(/Reference\s*2013/i);
   expect(modelRequests).toEqual([]);
   expect(outside).toEqual([]);
   await page.screenshot({ path: info.outputPath('result.png') });
+});
+
+test('121ページのPDFで表示中の1ページだけを描画する', async ({ page }, info) => {
+  const pdf = await PDFDocument.create();
+  for (let number = 1; number <= 121; number++) {
+    const sheet = pdf.addPage(number === 121 ? [540, 260] : [260, 540]);
+    if (number === 1 || number === 121) sheet.drawText(`Page ${number}`, { x: 30, y: 190, size: 24 });
+  }
+  await page.goto('./');
+  await page.getByLabel('ページ範囲').fill('1');
+  await page.locator('#file').setInputFiles({
+    name: '121-pages.pdf', mimeType: 'application/pdf', buffer: Buffer.from(await pdf.save()),
+  });
+  const preview = page.getByRole('region', { name: 'PDFプレビュー' });
+  const number = preview.getByRole('spinbutton', { name: 'プレビューのページ番号' });
+  const image = preview.locator('#preview-raster canvas');
+  await expect(image).toBeVisible();
+  expect(await image.evaluate(canvas => canvas.width / canvas.height)).toBeLessThan(1);
+  await number.fill('121');
+  await number.press('Enter');
+  await expect(preview.getByRole('status')).toHaveText('変換範囲外');
+  await expect(preview.getByRole('button', { name: '次のページ' })).toBeDisabled();
+  await expect(image).toHaveCount(1);
+  expect(await image.evaluate(canvas => canvas.width / canvas.height)).toBeGreaterThan(1);
+  await preview.getByRole('button', { name: '前のページ' }).click();
+  await expect(number).toHaveValue('120');
+  await expect(image).toBeVisible();
+  expect(await image.evaluate(canvas => canvas.width / canvas.height)).toBeLessThan(1);
+  await expect(page.getByRole('link', { name: 'EPUB', exact: true })).toBeVisible({ timeout: 60_000 });
+  await number.fill('1');
+  await number.press('Enter');
+  await expect(preview.getByRole('status')).toContainText('解析済み');
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  await preview.screenshot({ path: info.outputPath('pdf-preview-mobile.png') });
+  await expect(preview.getByRole('checkbox', { name: '解析枠を表示' })).toBeChecked();
+  await preview.getByRole('checkbox', { name: '解析枠を表示' }).uncheck();
+  await expect(preview.getByLabel('検出領域', { exact: true })).toBeHidden();
 });
 
 test('スマートフォン幅でPDFの選択とエラーが表示される', async ({ page }, info) => {

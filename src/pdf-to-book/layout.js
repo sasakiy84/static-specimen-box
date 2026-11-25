@@ -67,6 +67,41 @@ export function charactersOf(runs, vertical) {
   });
 }
 
+export function inPageFurniture(box, vertical, regions, minimumInlineCoverage = .7) {
+  const inline = Number(vertical);
+  const cross = 1 - inline;
+  return regions.some(region =>
+    Math.min(box[inline + 2], region[inline + 2]) - Math.max(box[inline], region[inline]) >=
+      (box[inline + 2] - box[inline]) * minimumInlineCoverage &&
+    Math.min(box[cross + 2], region[cross + 2]) - Math.max(box[cross], region[cross]) >=
+      (box[cross + 2] - box[cross]) * .55);
+}
+
+export function withoutPageFurniture(runs, regions) {
+  if (!regions.length) return runs;
+  return runs.flatMap(run => {
+    const nearby = regions.filter(region => overlap(run.box, region) > 0);
+    if (!nearby.length) return [run];
+    const chars = charactersOf([run], run.vertical);
+    const covered = chars.map(char => inPageFurniture(char.box, run.vertical, nearby));
+    if (!covered.some(Boolean)) return [run];
+
+    const result = [];
+    let start = 0;
+    for (let i = 0; i <= chars.length; i++) {
+      // 開き括弧などは字形の余白が大きいため、隣の文字も柱に属する場合だけ境界を補う。
+      const punctuation = (covered[i - 1] || covered[i + 1]) && /^\p{Punctuation}$/u.test(chars[i]?.text ?? '') &&
+        inPageFurniture(chars[i].box, run.vertical, nearby, .32);
+      if (i < chars.length && !covered[i] && !punctuation) continue;
+      const part = chars.slice(start, i);
+      const text = part.map(char => char.text).join('');
+      if (text.trim()) result.push({ ...run, text, box: frame(part.map(char => char.box)) });
+      start = i + 1;
+    }
+    return result;
+  });
+}
+
 export function attachRuby(lines, readings) {
   for (const reading of readings) {
     if (!lines.length) break;

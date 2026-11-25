@@ -27,10 +27,8 @@ export function pageNumbers(range, count) {
   return [...selected].sort((a, b) => a - b);
 }
 
-export async function renderPage(page, signal, preferPdfText) {
-  const original = page.getViewport({ scale: 1 });
-  const scale = Math.min(2.5, 3200 / Math.max(original.width, original.height));
-  const viewport = page.getViewport({ scale });
+async function renderCanvas(page, viewport, signal, preferPdfText = false) {
+  signal.throwIfAborted();
   const canvas = document.createElement('canvas');
   canvas.width = Math.max(1, Math.ceil(viewport.width));
   canvas.height = Math.max(1, Math.ceil(viewport.height));
@@ -40,6 +38,30 @@ export async function renderPage(page, signal, preferPdfText) {
   try {
     const textContent = preferPdfText ? page.getTextContent().catch(() => null) : null;
     const [, text] = await Promise.all([task.promise, textContent]);
+    signal.throwIfAborted();
+    return { canvas, text };
+  } catch (error) {
+    canvas.width = canvas.height = 0;
+    throw error;
+  } finally {
+    signal.removeEventListener('abort', cancel);
+    page.cleanup();
+  }
+}
+
+export async function renderPreviewPage(page, signal) {
+  const { width, height } = page.getViewport({ scale: 1 });
+  const viewport = page.getViewport({ scale: Math.min(4, 1600 / Math.max(width, height)) });
+  const { canvas } = await renderCanvas(page, viewport, signal);
+  return canvas;
+}
+
+export async function renderPage(page, signal, preferPdfText) {
+  const original = page.getViewport({ scale: 1 });
+  const scale = Math.min(2.5, 3200 / Math.max(original.width, original.height));
+  const viewport = page.getViewport({ scale });
+  const { canvas, text } = await renderCanvas(page, viewport, signal, preferPdfText);
+  try {
     const layer = text?.items.flatMap(item => {
       if (!item.str?.trim() || /[\uFFFD\p{Co}]/u.test(item.str)) return [];
       const transform = Util.transform(viewport.transform, item.transform);
@@ -54,8 +76,6 @@ export async function renderPage(page, signal, preferPdfText) {
     signal.throwIfAborted();
     return { image: await createImageBitmap(canvas), layer };
   } finally {
-    signal.removeEventListener('abort', cancel);
     canvas.width = canvas.height = 0;
-    page.cleanup();
   }
 }

@@ -1,9 +1,13 @@
 import { OCRModels, isVertical } from './ocr-models.js';
-import { arrangePage, attachRuby, buildTable, center, charactersOf, contains, height, overlap, width } from './layout.js';
+import {
+  arrangePage, attachRuby, buildTable, center, charactersOf, contains, frame, height, inPageFurniture,
+  overlap, width, withoutPageFurniture,
+} from './layout.js';
 
 let models;
 const imageLabels = new Set([6, 11, 12, 13, 15]);
 const lineLabels = new Set([1, 2, 4, 5, 16]);
+const pageFurnitureLabels = new Set([8, 9]); // NDLOCR-Liteの柱、ノンブル
 
 function ownRuns(layer, boxes) {
   const mapped = new Map();
@@ -19,15 +23,19 @@ function ownRuns(layer, boxes) {
   return mapped;
 }
 
-async function recognize(page, region, runs) {
+async function recognize(page, region, runs, pageFurniture) {
   const vertical = runs?.some(run => run.vertical) || isVertical(region.box);
-  const layerChars = runs?.length ? charactersOf(runs, vertical) : [];
-  let chars = layerChars;
+  let chars = runs?.length ? charactersOf(runs, vertical) : [];
+  const source = chars.length ? 'pdf' : 'ocr';
+  let box = region.box;
   if (!chars.length) {
     const text = await models.recognize(page, region.box, region.label === 10 ? 3 : region.count, vertical);
-    chars = charactersOf([{ text, box: region.box }], vertical);
+    const run = { text, box, vertical };
+    const visible = withoutPageFurniture([run], pageFurniture);
+    chars = charactersOf(visible, vertical);
+    if (chars.length && visible[0] !== run) box = frame(visible.map(part => part.box));
   }
-  return { ...region, vertical, chars, text: chars.map(char => char.text).join('').trim(), ruby: [] };
+  return { ...region, box, vertical, chars, text: chars.map(char => char.text).join('').trim(), ruby: [], source };
 }
 
 async function crop(page, box) {
@@ -122,12 +130,15 @@ function duplicateLines(lines, ruby) {
   return kept;
 }
 
-async function processPage(page, layer, structuredTables) {
+async function processPage(page, layer, { structuredTables, includeRuby }) {
   const detections = await models.detect(page);
-  const ruby = detections.filter(item => item.label === 10);
-  const candidates = duplicateLines(detections.filter(item => lineLabels.has(item.label)), ruby);
-  const textBlocks = detections.filter(item => item.label === 0);
-  const images = detections.filter(item => imageLabels.has(item.label));
+  const excludedRegions = detections.filter(({ label, score }) => pageFurnitureLabels.has(label) && score >= .4);
+  const pageFurniture = excludedRegions.map(({ box }) => box);
+  const content = detections.filter(({ box }) => !inPageFurniture(box, isVertical(box), pageFurniture, 1));
+  const ruby = content.filter(item => item.label === 10);
+  const candidates = duplicateLines(content.filter(item => lineLabels.has(item.label)), ruby);
+  const textBlocks = content.filter(item => item.label === 0);
+  const images = content.filter(item => imageLabels.has(item.label));
   const artwork = images.filter(({ label, box }) => {
     const area = width(box) * height(box);
     if (images.some(other => other.box !== box && (other.label === 15 || label !== 15) &&
@@ -142,20 +153,30 @@ async function processPage(page, layer, structuredTables) {
       (isVertical(line.box) ? height(line.box) > height(box) * .28 : width(line.box) > width(box) * .28));
     return bodyLines.length < 6;
   });
-  const regions = ownRuns(layer, [...candidates, ...ruby]);
+  const annotations = new Map([...textBlocks, ...artwork, ...candidates, ...ruby, ...excludedRegions]
+    .map(region => [region, { box: region.box, label: region.label }]));
+  const annotateText = (region, { box, text, source }) => {
+    annotations.set(region, { box, label: region.label ?? 1, text, source });
+  };
+  const visibleLayer = withoutPageFurniture(layer, pageFurniture);
+  const regions = ownRuns(visibleLayer, [...candidates, ...ruby]);
   const lines = [];
   for (const region of candidates) {
     const inside = artwork.find(art => contains(art.box, center(region.box)));
     if (inside && (inside.label !== 15 || !structuredTables)) continue;
-    const line = await recognize(page, region, regions.get(region));
-    if (line.text) lines.push(line);
+    const line = await recognize(page, region, regions.get(region), pageFurniture);
+    if (line.text) {
+      lines.push(line);
+      annotateText(region, line);
+    }
   }
   const assignedRuns = new Set([...regions.values()].flat());
-  for (const run of layer) {
+  for (const run of visibleLayer) {
     if (assignedRuns.has(run) || artwork.some(art => contains(art.box, center(run.box)))) continue;
     const overlaps = [...candidates, ...ruby].some(item => contains(item.box, center(run.box)));
     if (overlaps) continue;
     lines.push({ ...run, label: 1, chars: charactersOf([run], run.vertical), ruby: [] });
+    annotateText(run, { ...run, source: 'pdf' });
   }
   const mainLines = lines.filter(line => !artwork.some(art => contains(art.box, center(line.box))));
   const seen = new Set();
@@ -170,10 +191,13 @@ async function processPage(page, layer, structuredTables) {
   const readings = [];
   for (const region of ruby) {
     if (artwork.some(art => contains(art.box, center(region.box)))) continue;
-    const reading = await recognize(page, region, regions.get(region));
-    if (reading.text) readings.push(reading);
+    const reading = await recognize(page, region, regions.get(region), pageFurniture);
+    if (reading.text) {
+      readings.push(reading);
+      annotateText(region, reading);
+    }
   }
-  attachRuby(mainLines.length ? mainLines : lines, readings);
+  if (includeRuby) attachRuby(mainLines.length ? mainLines : lines, readings);
 
   const assets = [];
   let tableFallbacks = 0;
@@ -192,15 +216,18 @@ async function processPage(page, layer, structuredTables) {
     }
     assets.push({ box, kind, image: await crop(page, box), captions: [], table });
   }
-  if (!mainLines.length && readings.length) mainLines.push(...readings);
-  return { ...arrangePage(mainLines, assets), tableFallbacks };
+  if (includeRuby && !mainLines.length && readings.length) mainLines.push(...readings);
+  return {
+    ...arrangePage(mainLines, assets), tableFallbacks,
+    preview: { width: page.width, height: page.height, annotations: [...annotations.values()] },
+  };
 }
 
 self.addEventListener('message', async event => {
-  const { image, layer, assets, tables, useGpu } = event.data;
+  const { image, layer, assets, tables, includeRuby, useGpu } = event.data;
   try {
     models ??= new OCRModels(assets, progress => self.postMessage({ progress }), useGpu);
-    const result = await processPage(image, layer, tables);
+    const result = await processPage(image, layer, { structuredTables: tables, includeRuby });
     const buffers = result.blocks.flatMap(block => block.image ? [block.image.buffer] : []);
     self.postMessage({ result }, buffers);
   } catch (error) {
