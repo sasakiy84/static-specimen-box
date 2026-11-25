@@ -50,8 +50,9 @@ async function fixture(page) {
   pdf.setTitle('OCR example');
   const main = pdf.addPage([590, 760]);
   main.drawImage(await pdf.embedPng(image), { x: 0, y: 0, width: 590, height: 760 });
-  const text = pdf.addPage([590, 760]);
   const font = await pdf.embedFont(StandardFonts.Helvetica);
+  main.drawText('The embedded text layer is the selected source.', { x: 53, y: 655, size: 15, font, opacity: 0 });
+  const text = pdf.addPage([590, 760]);
   text.drawText('A page with embedded text remains editable.', { x: 50, y: 660, size: 20, font });
   return Buffer.from(await pdf.save());
 }
@@ -64,7 +65,14 @@ async function download(page, name, path) {
   return readFile(path);
 }
 
-test('スキャンと文字入りPDFを実モデルで変換し、図表入りEPUBを端末で生成する', async ({ page }, info) => {
+function figureImages(archive, chapters) {
+  return new Map(Array.from(
+    chapters.matchAll(/<figure><img src="([^"]+)"[^>]*\/><figcaption>([^<]+)<\/figcaption><\/figure>/g),
+    ([, path, caption]) => [caption, archive['EPUB/' + path]],
+  ));
+}
+
+test('文字レイヤーとOCRを切り替えても、図表の切り出しとキャプションを維持する', async ({ page }, info) => {
   const outside = [];
   const modelRequests = [];
   page.on('request', request => {
@@ -75,16 +83,26 @@ test('スキャンと文字入りPDFを実モデルで変換し、図表入りEP
   await page.goto('./');
   const pdf = await fixture(page);
   const input = page.locator('#file');
+  const preferText = page.getByRole('checkbox', { name: 'PDFに埋め込まれた文字を優先する' });
+  await expect(preferText).toBeChecked();
+  await preferText.uncheck();
   await input.setInputFiles({ name: 'sample.pdf', mimeType: 'application/pdf', buffer: pdf });
   await expect(page.getByRole('region', { name: 'ダウンロード' })).toBeVisible({ timeout: 105_000 });
   const epub = unzipSync(await download(page, 'EPUB', info.outputPath('sample.epub')));
   const chapters = Object.entries(epub).filter(([name]) => name.includes('/chapter-')).map(([, bytes]) => strFromU8(bytes)).join('');
   expect(chapters).toContain('Sample Document');
   expect(chapters).toMatch(/browser optical character recognition/i);
-  expect(chapters).toContain('embedded text remains editable');
+  expect(chapters).toMatch(/embedded text remains editable/i);
+  expect(chapters).not.toContain('The embedded text layer is the selected source.');
   expect(chapters).toContain('<figure>');
   expect(chapters).toMatch(/<ruby>図書館<rp>（<\/rp><rt>とし[ょよ]かん<\/rt>/);
-  expect(Object.keys(epub).filter(name => name.endsWith('.png')).length).toBeGreaterThanOrEqual(2);
+  const figures = figureImages(epub, chapters);
+  expect([...figures.keys()]).toEqual(['Table 1. Archival holdings', 'Figure 1. Mountain landscape']);
+  for (const image of figures.values()) {
+    const dimensions = new DataView(image.buffer, image.byteOffset, image.byteLength);
+    expect(dimensions.getUint32(16)).toBeLessThan(590 * 2.5);
+    expect(dimensions.getUint32(20)).toBeLessThan(760 * 2.5 / 2);
+  }
   const markdown = unzipSync(await download(page, 'Markdown ＋ 画像', info.outputPath('sample-markdown.zip')));
   const document = strFromU8(markdown['document.md']);
   expect(document).toContain('Sample Document');
@@ -95,10 +113,22 @@ test('スキャンと文字入りPDFを実モデルで変換し、図表入りEP
   expect(modelRequests.length).toBeGreaterThan(0);
   modelRequests.length = 0;
   await page.reload();
-  await page.locator('input[name="pages"]').fill('2');
+  await expect(preferText).toBeChecked();
+  await page.locator('input[name="pages"]').fill('1');
   await page.locator('select[name="format"]').selectOption('epub');
   await input.setInputFiles({ name: 'sample.pdf', mimeType: 'application/pdf', buffer: pdf });
   await expect(page.getByRole('link', { name: 'EPUB', exact: true })).toBeVisible({ timeout: 45_000 });
+  const textEpub = unzipSync(await download(page, 'EPUB', info.outputPath('prefer-pdf-text.epub')));
+  const textChapters = Object.entries(textEpub).filter(([name]) => name.includes('/chapter-'))
+    .map(([, bytes]) => strFromU8(bytes)).join('');
+  expect(textChapters).toContain('The embedded text layer is the selected source.');
+  expect(textChapters).not.toMatch(/browser optical character recognition/i);
+  expect(textChapters).toMatch(/図書館/);
+  const textFigures = figureImages(textEpub, textChapters);
+  expect([...textFigures.keys()]).toEqual([...figures.keys()]);
+  for (const [caption, image] of figures) {
+    expect(Buffer.from(textFigures.get(caption))).toEqual(Buffer.from(image));
+  }
   expect(modelRequests).toEqual([]);
   expect(outside).toEqual([]);
   await page.screenshot({ path: info.outputPath('result.png') });

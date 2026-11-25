@@ -91,6 +91,7 @@ async function convert(file) {
   const settings = new FormData(form);
   const markdown = settings.get('format') !== 'epub';
   const epub = settings.get('format') !== 'markdown';
+  const preferPdfText = settings.has('prefer-pdf-text');
   byId('choose').disabled = true;
   byId('settings').disabled = true;
   titleField.textContent = file.name;
@@ -121,7 +122,7 @@ async function convert(file) {
       signal.throwIfAborted();
       setProgress(`${number}ページ目を描画しています…`, `${index + 1} / ${numbers.length} ページ`, index, numbers.length);
       const page = await pdf.getPage(number);
-      const { image, layer } = await renderPage(page, signal);
+      const { image, layer } = await renderPage(page, signal, preferPdfText);
       pages.push({ number, ...await processImage(worker, image, layer, markdown, signal, number, index, numbers.length) });
     }
     worker.terminate();

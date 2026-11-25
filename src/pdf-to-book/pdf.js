@@ -27,7 +27,7 @@ export function pageNumbers(range, count) {
   return [...selected].sort((a, b) => a - b);
 }
 
-export async function renderPage(page, signal) {
+export async function renderPage(page, signal, preferPdfText) {
   const original = page.getViewport({ scale: 1 });
   const scale = Math.min(2.5, 3200 / Math.max(original.width, original.height));
   const viewport = page.getViewport({ scale });
@@ -38,8 +38,9 @@ export async function renderPage(page, signal) {
   const cancel = () => task.cancel();
   signal.addEventListener('abort', cancel, { once: true });
   try {
-    const [_, text] = await Promise.all([task.promise, page.getTextContent()]);
-    const layer = text.items.flatMap(item => {
+    const textContent = preferPdfText ? page.getTextContent().catch(() => null) : null;
+    const [, text] = await Promise.all([task.promise, textContent]);
+    const layer = text?.items.flatMap(item => {
       if (!item.str?.trim() || /[\uFFFD\p{Co}]/u.test(item.str)) return [];
       const transform = Util.transform(viewport.transform, item.transform);
       const [a, b, c, d, x, y] = transform;
@@ -49,7 +50,7 @@ export async function renderPage(page, signal) {
       const box = vertical ? [x - fontSize * .5, y, x + fontSize * .55, y + advance] :
         [x, y - fontSize * .88, x + advance, y + fontSize * .18];
       return [{ text: item.str, vertical, box }];
-    });
+    }) ?? [];
     signal.throwIfAborted();
     return { image: await createImageBitmap(canvas), layer };
   } finally {

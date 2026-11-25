@@ -25,6 +25,8 @@ select, input, .button {
   background: #fff; padding: 8px 12px; min-height: 42px; min-width: 0;
 }
 select, input { width: 100%; }
+.text-layer-option { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; min-height: 32px; }
+.text-layer-option input { width: 17px; height: 17px; min-height: 0; margin: 0; padding: 0; flex: none; accent-color: var(--accent); }
 .button { display: inline-flex; align-items: center; justify-content: center; cursor: pointer; font-weight: 650; text-decoration: none; }
 .button:disabled { cursor: default; opacity: .55; }
 .primary { background: var(--accent); border-color: var(--accent); color: #fff; }
