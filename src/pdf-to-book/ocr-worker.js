@@ -1,5 +1,5 @@
 import { OCRModels, isVertical } from './ocr-models.js';
-import { arrangePage, attachRuby, buildTable, center, charactersOf, contains, height, width } from './layout.js';
+import { arrangePage, attachRuby, buildTable, center, charactersOf, contains, height, overlap, width } from './layout.js';
 
 let models;
 const imageLabels = new Set([6, 11, 12, 13, 15]);
@@ -124,12 +124,24 @@ function duplicateLines(lines, ruby) {
 
 async function processPage(page, layer, structuredTables) {
   const detections = await models.detect(page);
-  const artwork = detections.filter(item => imageLabels.has(item.label)).filter(({ label, box }) =>
-    !detections.some(other => imageLabels.has(other.label) && other.box !== box &&
-      (other.label === 15 || label !== 15) && width(other.box) * height(other.box) > 1.15 * width(box) * height(box) &&
-      contains(other.box, [box[0], box[1]]) && contains(other.box, [box[2], box[3]])));
   const ruby = detections.filter(item => item.label === 10);
   const candidates = duplicateLines(detections.filter(item => lineLabels.has(item.label)), ruby);
+  const textBlocks = detections.filter(item => item.label === 0);
+  const images = detections.filter(item => imageLabels.has(item.label));
+  const artwork = images.filter(({ label, box }) => {
+    const area = width(box) * height(box);
+    if (images.some(other => other.box !== box && (other.label === 15 || label !== 15) &&
+      ((other.label === 15 && label !== 15 && overlap(other.box, box) > area * .92) ||
+       (width(other.box) * height(other.box) > area * 1.15 &&
+        contains(other.box, [box[0], box[1]]) && contains(other.box, [box[2], box[3]]))))) return false;
+    if (label === 15 || width(box) < page.width * .37 || height(box) < page.height * .54) return true;
+    // 見開きの紙面や綴じ枠が図版と判定されても、内部のまとまった本文は読み取る。
+    const paragraphs = textBlocks.filter(block => overlap(block.box, box) >= width(block.box) * height(block.box) * .8);
+    const bodyLines = candidates.filter(line => line.label === 1 && contains(box, center(line.box)) &&
+      paragraphs.some(block => contains(block.box, center(line.box))) &&
+      (isVertical(line.box) ? height(line.box) > height(box) * .28 : width(line.box) > width(box) * .28));
+    return bodyLines.length < 6;
+  });
   const regions = ownRuns(layer, [...candidates, ...ruby]);
   const lines = [];
   for (const region of candidates) {
@@ -180,9 +192,8 @@ async function processPage(page, layer, structuredTables) {
     }
     assets.push({ box, kind, image: await crop(page, box), captions: [], table });
   }
-  const blocks = detections.filter(item => item.label === 0).map(item => item.box);
   if (!mainLines.length && readings.length) mainLines.push(...readings);
-  return { ...arrangePage(mainLines, assets, blocks), tableFallbacks };
+  return { ...arrangePage(mainLines, assets), tableFallbacks };
 }
 
 self.addEventListener('message', async event => {
