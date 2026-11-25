@@ -20,6 +20,8 @@
 /pdf-to-book/*
   Content-Security-Policy: default-src 'none'; script-src 'self' 'wasm-unsafe-eval' blob:; style-src 'self'; worker-src 'self' blob:; font-src 'self' blob: data:; img-src 'self' blob: data:; connect-src 'self' blob:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
   Referrer-Policy: no-referrer
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
 
 /pdf-to-book/
   Cache-Control: public, max-age=0, must-revalidate, no-transform

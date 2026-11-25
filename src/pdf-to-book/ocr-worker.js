@@ -170,11 +170,12 @@ async function processPage(page, layer, structuredTables) {
     let table = null;
     if (kind === 'table' && structuredTables) {
       const cellLines = lines.filter(line => contains(box, center(line.box)));
-      let cells = [];
-      try { cells = await models.tableCells(page, box); } catch (error) {
-        if (!/DeformConv|not implemented|kernel/i.test(String(error))) throw error;
+      table = buildTable(findGridCells(page, box), cellLines);
+      if (!table) {
+        try { table = buildTable(await models.tableCells(page, box), cellLines); } catch (error) {
+          if (!/DeformConv|not implemented|kernel/i.test(String(error))) throw error;
+        }
       }
-      table = buildTable(findGridCells(page, box), cellLines) ?? buildTable(cells, cellLines);
       if (!table) tableFallbacks++;
     }
     assets.push({ box, kind, image: await crop(page, box), captions: [], table });
@@ -185,9 +186,9 @@ async function processPage(page, layer, structuredTables) {
 }
 
 self.addEventListener('message', async event => {
-  const { image, layer, assets, tables } = event.data;
+  const { image, layer, assets, tables, useGpu } = event.data;
   try {
-    models ??= new OCRModels(assets, progress => self.postMessage({ progress }));
+    models ??= new OCRModels(assets, progress => self.postMessage({ progress }), useGpu);
     const result = await processPage(image, layer, tables);
     const buffers = result.blocks.flatMap(block => block.image ? [block.image.buffer] : []);
     self.postMessage({ result }, buffers);

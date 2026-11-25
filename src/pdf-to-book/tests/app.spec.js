@@ -81,6 +81,7 @@ test('文字レイヤーとOCRを切り替えても、図表の切り出しと�
         new URL(request.url()).origin !== new URL(info.project.use.baseURL).origin) outside.push(request.url());
   });
   await page.goto('./');
+  expect(await page.evaluate(() => crossOriginIsolated)).toBe(true);
   const pdf = await fixture(page);
   const input = page.locator('#file');
   const preferText = page.getByRole('checkbox', { name: 'PDFに埋め込まれた文字を優先する' });
@@ -93,6 +94,7 @@ test('文字レイヤーとOCRを切り替えても、図表の切り出しと�
   expect(chapters).toContain('Sample Document');
   expect(chapters).toMatch(/browser optical character recognition/i);
   expect(chapters).toMatch(/embedded text remains editable/i);
+  expect(chapters.indexOf('Sample Document')).toBeLessThan(chapters.search(/embedded text remains editable/i));
   expect(chapters).not.toContain('The embedded text layer is the selected source.');
   expect(chapters).toContain('<figure>');
   expect(chapters).toMatch(/<ruby>図書館<rp>（<\/rp><rt>とし[ょよ]かん<\/rt>/);
@@ -111,9 +113,11 @@ test('文字レイヤーとOCRを切り替えても、図表の切り出しと�
   expect(document.match(/Figure 1\./g)).toHaveLength(2);
   expect(document).toMatch(/\|\s*Material\s*\||<table>/i);
   expect(modelRequests.length).toBeGreaterThan(0);
+  expect(modelRequests.some(url => /\/models\/table-/.test(url))).toBe(false);
   modelRequests.length = 0;
   await page.reload();
   await expect(preferText).toBeChecked();
+  await page.getByRole('checkbox', { name: 'レイアウト検出にWebGPUを使う（試験的）' }).check();
   await page.locator('input[name="pages"]').fill('1');
   await page.locator('select[name="format"]').selectOption('epub');
   await input.setInputFiles({ name: 'sample.pdf', mimeType: 'application/pdf', buffer: pdf });

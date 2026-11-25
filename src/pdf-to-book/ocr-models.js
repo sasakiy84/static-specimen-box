@@ -1,6 +1,7 @@
 import * as ort from 'onnxruntime-web/wasm';
 import manifest from './model-manifest.json';
 import charset from './charset.json';
+import { dependencies } from './package.json';
 
 const mean = [.485, .456, .406];
 const std = [.229, .224, .225];
@@ -8,12 +9,43 @@ const tableMean = [.40789654, .44719302, .47026115];
 const tableStd = [.28863828, .27408164, .27809835];
 const chars = [...charset];
 
+async function gpuLayout(assets, buffer) {
+  if (!navigator.gpu || typeof DecompressionStream !== 'function') return null;
+  const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
+  if (!adapter || adapter.info?.isFallbackAdapter) return null;
+
+  const folder = new URL(`ort/webgpu-${dependencies['onnxruntime-web']}/`, assets);
+  const moduleUrl = new URL('ort.webgpu.min.mjs', folder).href;
+  const [runtime, response] = await Promise.all([
+    import(/* @vite-ignore */ moduleUrl),
+    fetch(new URL('ort-wasm-simd-threaded.asyncify.wasm-gzip.bin', folder)),
+  ]);
+  if (!response.ok || !response.body) return null;
+  const unpacked = response.body.pipeThrough(new DecompressionStream('gzip'));
+  runtime.env.wasm.wasmBinary = await new Response(unpacked).arrayBuffer();
+  runtime.env.wasm.wasmPaths = folder.href;
+  runtime.env.wasm.numThreads = ort.env.wasm.numThreads;
+  runtime.env.webgpu.adapter = adapter;
+  const session = await runtime.InferenceSession.create(buffer, { executionProviders: ['webgpu', 'wasm'] });
+  const device = runtime.env.webgpu.device;
+  if (!device) {
+    await session.release();
+    return null;
+  }
+  const entry = { session, Tensor: runtime.Tensor, device, lost: false };
+  void device.lost.then(() => { entry.lost = true; });
+  return entry;
+}
+
 export class OCRModels {
-  constructor(assets, notify) {
+  constructor(assets, notify, useGpu) {
     this.assets = assets;
     this.notify = notify;
+    this.useGpu = useGpu;
     this.sessions = new Map();
-    ort.env.wasm.numThreads = 1;
+    ort.env.wasm.numThreads = crossOriginIsolated && typeof SharedArrayBuffer !== 'undefined'
+      ? Math.max(1, Math.min(4, Math.floor((navigator.hardwareConcurrency || 2) / 2)))
+      : 1;
     ort.env.wasm.wasmPaths = new URL('ort/', assets).href;
   }
 
@@ -43,26 +75,51 @@ export class OCRModels {
       })).catch(() => {});
     }
     this.notify({ model: name, loaded: bytes, bytes });
-    const session = await ort.InferenceSession.create(buffer, { executionProviders: ['wasm'] });
-    this.sessions.set(name, session);
-    return session;
+    const accelerated = name === 'layout' && this.useGpu
+      ? await gpuLayout(this.assets, buffer).catch(() => null)
+      : null;
+    const entry = accelerated ?? {
+      session: await ort.InferenceSession.create(buffer, { executionProviders: ['wasm'] }),
+      Tensor: ort.Tensor,
+    };
+    this.sessions.set(name, entry);
+    return entry;
   }
 
   // NDL 公式の DEIM 推論と同じく、黒背景の正方形に揃えて RGB を正規化する。
   async detect(page) {
-    const session = await this.load('layout');
-    const size = session.inputMetadata[0].shape[2];
+    let layout = await this.load('layout');
+    const size = layout.session.inputMetadata[0].shape[2];
     const side = Math.max(page.width, page.height);
     const scale = size / side;
     const canvas = new OffscreenCanvas(size, size);
     const context = canvas.getContext('2d', { willReadFrequently: true });
     context.fillRect(0, 0, size, size);
     context.drawImage(page, 0, 0, page.width * scale, page.height * scale);
-    const outputs = await session.run({
-      [session.inputNames[0]]: pixels(canvas, mean, std),
-      [session.inputNames[1]]: new ort.Tensor('int64', BigInt64Array.of(BigInt(size), BigInt(size)), [1, 2]),
-    });
-    const [labels, boxes, scores, counts, styles] = session.outputNames.map(output => outputs[output]?.data);
+    const run = async ({ session, Tensor, lost }) => {
+      if (lost) throw new Error('WebGPU device lost');
+      const input = pixels(canvas, mean, std, false, Tensor);
+      const dimensions = new Tensor('int64', BigInt64Array.of(BigInt(size), BigInt(size)), [1, 2]);
+      try {
+        return await session.run({ [session.inputNames[0]]: input, [session.inputNames[1]]: dimensions });
+      } finally {
+        input.dispose();
+        dimensions.dispose();
+      }
+    };
+    let outputs;
+    try {
+      outputs = await run(layout);
+    } catch (error) {
+      if (!layout.device) throw error;
+      this.useGpu = false;
+      this.sessions.delete('layout');
+      void layout.session.release().catch(() => {});
+      layout = await this.load('layout');
+      outputs = await run(layout);
+    }
+    const { outputNames } = layout.session;
+    const [labels, boxes, scores, counts, styles] = outputNames.map(output => outputs[output]?.data);
     const detections = [];
     for (let i = 0; i < scores.length; i++) {
       if (scores[i] <= .1) continue;
@@ -71,7 +128,7 @@ export class OCRModels {
         Math.min(page.width, x2 / scale), Math.min(page.height, y2 / scale)];
       if (box[2] - box[0] < 2 || box[3] - box[1] < 2) continue;
       detections.push({ box, label: Number(labels[i]) - 1, score: scores[i],
-        count: Number(counts?.[i] ?? 0), style: styles && session.outputNames.length === 6 ? Number(styles[i]) : 0 });
+        count: Number(counts?.[i] ?? 0), style: styles && outputNames.length === 6 ? Number(styles[i]) : 0 });
     }
     for (const tensor of Object.values(outputs)) tensor.dispose();
     return suppressDuplicates(detections);
@@ -96,7 +153,7 @@ export class OCRModels {
   }
 
   async readLine(page, box, rotate, name) {
-    const session = await this.load(name);
+    const { session } = await this.load(name);
     const [, , height, width] = session.inputMetadata[0].shape;
     const canvas = new OffscreenCanvas(width, height);
     const context = canvas.getContext('2d', { willReadFrequently: true });
@@ -120,7 +177,7 @@ export class OCRModels {
   }
 
   async tableCells(page, box) {
-    const session = await this.load('table');
+    const { session } = await this.load('table');
     const [, , height, width] = session.inputMetadata[0].shape;
     const [x1, y1, x2, y2] = box;
     const w = x2 - x1, h = y2 - y1;
@@ -146,7 +203,7 @@ async function hash(buffer) {
   return Array.from(bytes, value => value.toString(16).padStart(2, '0')).join('');
 }
 
-function pixels(canvas, mean, std, bgr = false) {
+function pixels(canvas, mean, std, bgr = false, Tensor = ort.Tensor) {
   const { width, height } = canvas;
   const rgba = canvas.getContext('2d').getImageData(0, 0, width, height).data;
   const length = width * height;
@@ -156,7 +213,7 @@ function pixels(canvas, mean, std, bgr = false) {
     const offset = length * channel;
     for (let i = 0; i < length; i++) values[offset + i] = (rgba[4 * i + source] / 255 - mean[channel]) / std[channel];
   }
-  return new ort.Tensor('float32', values, [1, 3, height, width]);
+  return new Tensor('float32', values, [1, 3, height, width]);
 }
 
 export function isVertical([x1, y1, x2, y2]) { return y2 - y1 > (x2 - x1) * 1.1; }

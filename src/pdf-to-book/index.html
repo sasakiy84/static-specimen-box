@@ -26,9 +26,13 @@
         <label>ページ範囲
           <input name="pages" type="text" placeholder="全ページ（例 1-3, 5）" autocomplete="off">
         </label>
-        <label class="text-layer-option">
+        <label class="checkbox-option">
           <input name="prefer-pdf-text" type="checkbox" checked>
           PDFに埋め込まれた文字を優先する
+        </label>
+        <label class="checkbox-option">
+          <input name="webgpu" type="checkbox">
+          レイアウト検出にWebGPUを使う（試験的）
         </label>
       </fieldset>
     </form>

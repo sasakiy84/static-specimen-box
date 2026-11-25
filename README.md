@@ -79,6 +79,8 @@ PDFを選ぶと、NDLOCR-Lite v2.0.0を使って端末内で読み取り、Markd
 
 モデルとWebAssemblyはサイト自身が配信します。NDL公式モデル（基本約157 MB、表構造用約28 MB）の分割ファイルを `src/pdf-to-book/models/` に収録しています。ブラウザは必要なモデルを組み立て、SHA-256で検証してからキャッシュします。モデルの準備と配布用ファイルの生成は `npm run build`、テストは `npm test` で実行できます。
 
+通常は端末に応じてWebAssemblyを最大4スレッドで実行します。WebGPUの試験設定を有効にすると、対応端末では図表や文字領域の検出にGPUを使います。利用できない場合はWebAssemblyで処理を続けます。
+
 
 ## turris-altissima
 

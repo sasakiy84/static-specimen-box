@@ -43,7 +43,7 @@ function addDownload(name, label, data, type) {
   actions.append(link);
 }
 
-function processImage(worker, image, layer, tables, signal, page, index, total) {
+function processImage(worker, image, layer, { tables, useGpu, signal, page, index, total }) {
   return new Promise((resolve, reject) => {
     const clean = () => {
       worker.removeEventListener('message', receive);
@@ -72,7 +72,7 @@ function processImage(worker, image, layer, tables, signal, page, index, total) 
     worker.addEventListener('error', fail);
     signal.addEventListener('abort', cancel, { once: true });
     setProgress(`${page}ページ目を読み取っています…`, `${index + 1} / ${total} ページ`, index, total);
-    worker.postMessage({ image, layer, tables, assets: assets.href }, [image]);
+    worker.postMessage({ image, layer, tables, useGpu, assets: assets.href }, [image]);
   });
 }
 
@@ -92,12 +92,13 @@ async function convert(file) {
   const markdown = settings.get('format') !== 'epub';
   const epub = settings.get('format') !== 'markdown';
   const preferPdfText = settings.has('prefer-pdf-text');
+  const useGpu = settings.has('webgpu');
   byId('choose').disabled = true;
   byId('settings').disabled = true;
   titleField.textContent = file.name;
   progressPanel.hidden = false;
   setProgress('PDFを読み込んでいます…');
-  let pdfTask, worker;
+  let pdfTask, worker, pendingPage;
   try {
     if (!globalThis.OffscreenCanvas || !globalThis.Worker || !globalThis.crypto?.subtle) {
       throw new Error('お使いのブラウザでは端末内OCRを実行できません。');
@@ -117,13 +118,25 @@ async function convert(file) {
     const basename = file.name.replace(/\.pdf$/i, '') || 'document';
     const title = metadata?.info?.Title?.trim() || basename;
     worker = new Worker(new URL('./ocr-worker.js', import.meta.url), { type: 'module' });
+    // 画面の進捗はOCR中のページを示し、裏で最大1ページだけ先に描画する。
+    const preparePage = number => pdf.getPage(number).then(page => {
+      signal.throwIfAborted();
+      return renderPage(page, signal, preferPdfText);
+    }).then(result => ({ result }), error => ({ error }));
     const pages = [];
+    pendingPage = preparePage(numbers[0]);
     for (const [index, number] of numbers.entries()) {
       signal.throwIfAborted();
       setProgress(`${number}ページ目を描画しています…`, `${index + 1} / ${numbers.length} ページ`, index, numbers.length);
-      const page = await pdf.getPage(number);
-      const { image, layer } = await renderPage(page, signal, preferPdfText);
-      pages.push({ number, ...await processImage(worker, image, layer, markdown, signal, number, index, numbers.length) });
+      const prepared = await pendingPage;
+      pendingPage = undefined;
+      if (!prepared.result) throw prepared.error;
+      const { image, layer } = prepared.result;
+      const ocr = processImage(worker, image, layer, {
+        tables: markdown, useGpu, signal, page: number, index, total: numbers.length,
+      });
+      if (index + 1 < numbers.length && !signal.aborted) pendingPage = preparePage(numbers[index + 1]);
+      pages.push({ number, ...await ocr });
     }
     worker.terminate();
     if (!pages.some(page => page.blocks.length)) throw new Error('選んだページから文字や図表を読み取れませんでした。');
@@ -155,6 +168,8 @@ async function convert(file) {
   } finally {
     worker?.terminate();
     await pdfTask?.destroy().catch(() => {});
+    const unusedPage = await pendingPage;
+    unusedPage?.result?.image.close();
     progressPanel.hidden = true;
     active = undefined;
     byId('choose').disabled = false;
