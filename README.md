@@ -67,7 +67,7 @@ npm run dev
 
 `npm run build` で配布ファイルを作ります。`npx playwright install chromium` のあと `npm test` を実行すると、範囲外の文字の保持、指定した文字の削除、回転したページ、対応外の PDF の処理を確認できます。PyMuPDF、Pillow、Tesseract の英語データがある環境では、ブラウザテストが生成した `input.pdf` を `tests/audit_export.py` に渡して、独立した文字抽出、黒塗りの描画、OCR でも確認できます。
 
-## PDFから本へ
+## PDFをテキストデータ化するサイト
 
 ```sh
 cd src/pdf-to-book
