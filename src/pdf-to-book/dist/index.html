@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="PDFを端末内でOCRし、ルビや図表を含むMarkdownとEPUBに変換します。">
   <title>PDFをテキストデータ化するサイト</title>
-  <script type="module" crossorigin src="./assets/index-D7l5EqLs.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-jmsTUO13.css">
+  <script type="module" crossorigin src="./assets/index-p745krfv.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-AzkfbIJu.css">
 </head>
 <body>
   <main>
@@ -17,13 +17,6 @@
     </header>
     <form id="options">
       <fieldset id="settings">
-        <label>書き出し形式
-          <select name="format">
-            <option value="both">Markdown ＋ EPUB</option>
-            <option value="markdown">Markdown</option>
-            <option value="epub">EPUB</option>
-          </select>
-        </label>
         <label>ページ範囲
           <input name="pages" type="text" placeholder="全ページ（例 1-3, 5）" autocomplete="off">
         </label>
@@ -34,10 +27,6 @@
         <label class="checkbox-option">
           <input name="include-ruby" type="checkbox" autocomplete="off">
           ルビを出力する
-        </label>
-        <label class="checkbox-option">
-          <input name="webgpu" type="checkbox">
-          レイアウト検出にWebGPUを使う（試験的）
         </label>
       </fieldset>
     </form>
@@ -60,7 +49,12 @@
     <section id="results" aria-labelledby="result-title" hidden>
       <h2 id="result-title">ダウンロード</h2>
       <p id="result-details"></p>
-      <div id="downloads"></div>
+      <div id="downloads">
+        <button class="button primary" type="button" data-format="markdown">Markdown</button>
+        <button class="button primary" type="button" data-format="markdown-images">Markdown（画像あり）</button>
+        <button class="button primary" type="button" data-format="epub">EPUB</button>
+      </div>
+      <p id="download-status" role="status" hidden></p>
     </section>
     <section id="pdf-preview" aria-labelledby="preview-title" hidden>
       <h2 id="preview-title">PDFプレビュー</h2>
@@ -74,19 +68,16 @@
         </form>
         <label class="preview-toggle"><input id="preview-regions" type="checkbox" checked>解析枠を表示</label>
       </div>
-      <p id="preview-status" role="status"></p>
-      <ul id="preview-legend" aria-label="検出ラベルの凡例" hidden></ul>
-      <label id="preview-picker" hidden>検出領域
-        <select id="preview-region"></select>
-      </label>
+      <p id="preview-status" role="status" hidden></p>
       <div id="preview-frame" class="preview-frame" hidden>
         <div id="preview-raster"></div>
-        <div id="preview-overlay" aria-hidden="true"></div>
-        <div id="preview-tooltip" class="preview-tooltip" hidden>
+        <div id="preview-overlay" role="group" aria-label="検出枠" aria-description="上下矢印キーで枠を移動し、Escapeキーで選択を解除できます。" tabindex="-1"></div>
+        <div id="preview-tooltip" class="preview-tooltip" aria-live="polite" hidden>
           <strong id="preview-label"></strong>
           <span id="preview-text"></span>
         </div>
       </div>
+      <ul id="preview-legend" aria-label="検出ラベルの凡例" hidden></ul>
     </section>
     <footer>
       <details>

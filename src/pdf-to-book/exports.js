@@ -61,11 +61,13 @@ function blocksWithFiles(pages) {
   })));
 }
 
-function markdownBlock(block) {
+function markdownBlock(block, includeImages) {
   if (block.image) {
     const caption = paragraph(block.caption, 'md');
+    if (block.table) return [tableToMarkdown(block.table), caption].filter(Boolean).join('\n\n');
+    if (!includeImages) return [block.tableText?.map(md).join('  \n'), caption].filter(Boolean).join('\n\n');
     const alt = md(captionText(block.caption) || (block.kind === 'table' ? '表' : '図版'));
-    const visual = block.table ? tableToMarkdown(block.table) : `![${alt}](${block.file})`;
+    const visual = `![${alt}](${block.file})`;
     return caption ? `${visual}\n\n${caption}` : visual;
   }
   const text = paragraph(block.lines, 'md');
@@ -92,15 +94,16 @@ function archive(entries) {
   return new Promise((resolve, reject) => zip(entries, (error, bytes) => error ? reject(error) : resolve(bytes)));
 }
 
-export async function createMarkdown(title, pages) {
+export async function createMarkdown(title, pages, { includeImages = false } = {}) {
   const blocks = blocksWithFiles(pages);
-  const parts = blocks.map(markdownBlock);
-  const text = '# ' + md(title) + '\n\n' + parts.filter(Boolean).join('\n\n') + '\n';
-  const files = { 'document.md': strToU8(text) };
+  const parts = blocks.map(block => markdownBlock(block, includeImages));
+  const text = strToU8('# ' + md(title) + '\n\n' + parts.filter(Boolean).join('\n\n') + '\n');
+  if (!includeImages) return text;
+  const files = { 'document.md': text };
   for (const block of blocks) {
     if (block.image && !block.table) files[block.file] = stored(block.image);
   }
-  return { text: files['document.md'], bundle: Object.keys(files).length > 1 ? await archive(files) : null };
+  return archive(files);
 }
 
 const xhtml = (title, body, language, extra = '', namespaces = '') => `<?xml version="1.0" encoding="UTF-8"?>

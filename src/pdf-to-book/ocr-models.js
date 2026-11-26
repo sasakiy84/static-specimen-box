@@ -38,10 +38,10 @@ async function gpuLayout(assets, buffer) {
 }
 
 export class OCRModels {
-  constructor(assets, notify, useGpu) {
+  constructor(assets, notify) {
     this.assets = assets;
     this.notify = notify;
-    this.useGpu = useGpu;
+    this.tryGpu = true;
     this.sessions = new Map();
     ort.env.wasm.numThreads = crossOriginIsolated && typeof SharedArrayBuffer !== 'undefined'
       ? Math.max(1, Math.min(4, Math.floor((navigator.hardwareConcurrency || 2) / 2)))
@@ -75,7 +75,7 @@ export class OCRModels {
       })).catch(() => {});
     }
     this.notify({ model: name, loaded: bytes, bytes });
-    const accelerated = name === 'layout' && this.useGpu
+    const accelerated = name === 'layout' && this.tryGpu
       ? await gpuLayout(this.assets, buffer).catch(() => null)
       : null;
     const entry = accelerated ?? {
@@ -112,7 +112,7 @@ export class OCRModels {
       outputs = await run(layout);
     } catch (error) {
       if (!layout.device) throw error;
-      this.useGpu = false;
+      this.tryGpu = false;
       this.sessions.delete('layout');
       void layout.session.release().catch(() => {});
       layout = await this.load('layout');

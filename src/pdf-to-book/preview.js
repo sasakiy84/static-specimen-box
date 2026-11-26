@@ -38,10 +38,9 @@ export class PdfPreview {
     this.toggle = find('regions');
     this.status = find('status');
     this.legend = find('legend');
-    this.picker = find('picker');
-    this.regionSelect = find('region');
     this.frame = find('frame');
     this.raster = find('raster');
+    this.overlay = find('overlay');
     this.tooltip = find('tooltip');
     this.tooltipLabel = find('label');
     this.tooltipText = find('text');
@@ -62,18 +61,30 @@ export class PdfPreview {
       if (this.numberInput.validity.valid) void this.show(Number(this.numberInput.value));
     }, options);
     this.toggle.addEventListener('change', () => this.update(), options);
-    this.regionSelect.addEventListener('change', () => this.inspect(this.regionSelect.value), options);
+    this.overlay.addEventListener('keydown', event => {
+      if (event.key === 'Escape') {
+        this.selectedRegion = undefined;
+      } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        const direction = event.key === 'ArrowDown' ? 1 : -1;
+        const count = this.pages.get(this.number)?.annotations.length;
+        if (!count || !this.toggle.checked) return;
+        const current = this.selectedRegion ?? (direction > 0 ? -1 : 0);
+        this.selectedRegion = (current + direction + count) % count;
+      } else return;
+      event.preventDefault();
+      this.inspect(this.selectedRegion);
+    }, options);
 
-    this.stage = new Stage({ container: find('overlay'), width: 1, height: 1 });
+    this.stage = new Stage({ container: this.overlay, width: 1, height: 1 });
     this.layer = new Layer();
     this.rectangles = new Group();
     this.layer.add(this.rectangles);
     this.stage.add(this.layer);
     this.stage.on('mouseover', event => this.inspect(event.target.getAttr('region')));
-    this.stage.on('mouseout', () => this.inspect(this.regionSelect.value));
+    this.stage.on('mouseout', () => this.inspect(this.selectedRegion));
     this.stage.on('click tap', event => {
-      this.regionSelect.value = event.target.getAttr('region') ?? '';
-      this.inspect(this.regionSelect.value);
+      this.selectedRegion = event.target.getAttr('region');
+      this.inspect(this.selectedRegion);
     });
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(this.raster);
@@ -131,17 +142,20 @@ export class PdfPreview {
 
   update() {
     const layout = this.pages.get(this.number);
-    this.status.textContent = this.failed ? `${this.number}ページ目を表示できませんでした。` :
+    const status = this.failed ? `${this.number}ページ目を表示できませんでした。` :
       !this.canvas ? `${this.number}ページ目を表示しています…` :
-      layout ? `解析済み · ${layout.annotations.length}領域` :
+      layout ? '' :
       !this.numbers.has(this.number) ? '変換範囲外' : this.processing ? '解析待ち' : '未解析';
+    this.status.textContent = status;
+    this.status.hidden = !status;
     const annotations = this.canvas && this.toggle.checked ? layout?.annotations ?? [] : [];
     this.toggle.disabled = !layout?.annotations.length || !this.canvas;
     this.rectangles.destroyChildren();
+    this.selectedRegion = undefined;
     this.tooltip.hidden = true;
-    this.legend.hidden = this.picker.hidden = !annotations.length;
+    this.legend.hidden = !annotations.length;
+    this.overlay.tabIndex = annotations.length ? 0 : -1;
     this.legend.replaceChildren();
-    this.regionSelect.replaceChildren(new Option('領域を選択', ''));
     const usedLabels = new Set();
     const shapes = [];
     for (const [index, annotation] of annotations.entries()) {
@@ -155,13 +169,11 @@ export class PdfPreview {
         item.append(swatch, name);
         this.legend.append(item);
       }
-      const summary = annotation.text?.trim().slice(0, 50);
-      this.regionSelect.add(new Option(summary ? `${name} · ${summary}` : name, String(index)));
       const [x, y, right, bottom] = annotation.box;
       shapes.push({ annotation, rect: new Rect({
         x, y, width: right - x, height: bottom - y, stroke: color, strokeWidth: 1.5,
         fill: color + (annotation.label === 0 ? '0c' : '19'), strokeScaleEnabled: false,
-        perfectDrawEnabled: false, preventDefault: false, region: String(index),
+        perfectDrawEnabled: false, preventDefault: false, region: index,
       }) });
     }
     shapes.sort((a, b) => area(b.annotation.box) - area(a.annotation.box));
@@ -175,13 +187,12 @@ export class PdfPreview {
     const height = this.canvas?.clientHeight || 1;
     this.stage.size({ width, height });
     if (layout) this.rectangles.scale({ x: width / layout.width, y: height / layout.height });
-    if (this.regionSelect.value) this.inspect(this.regionSelect.value);
-    else this.tooltip.hidden = true;
+    this.inspect(this.selectedRegion);
   }
 
   inspect(index) {
     const layout = this.pages.get(this.number);
-    const annotation = index ? layout?.annotations[Number(index)] : undefined;
+    const annotation = layout?.annotations[index];
     this.tooltip.hidden = !annotation || !this.canvas || !this.toggle.checked;
     if (this.tooltip.hidden) return;
     this.tooltipLabel.textContent = labels[annotation.label][0] +

@@ -76,7 +76,7 @@ async function fixture(page) {
 
 async function download(page, name, path) {
   const started = page.waitForEvent('download');
-  await page.getByRole('link', { name, exact: true }).click();
+  await page.getByRole('button', { name, exact: true }).click();
   const file = await started;
   await file.saveAs(path);
   return readFile(path);
@@ -99,6 +99,8 @@ test('文字レイヤーとOCRの両方で柱とページ番号を除き、本�
   });
   await page.goto('./');
   expect(await page.evaluate(() => crossOriginIsolated)).toBe(true);
+  await expect(page.getByRole('combobox')).toHaveCount(0);
+  await expect(page.getByRole('checkbox', { name: /WebGPU/ })).toHaveCount(0);
   const { scan, withText } = await fixture(page);
   const input = page.locator('#file');
   const preferText = page.getByRole('checkbox', { name: 'PDFに埋め込まれた文字を優先する' });
@@ -134,11 +136,20 @@ test('文字レイヤーとOCRの両方で柱とページ番号を除き、本�
   await overlay.hover({ position: { x: bounds.width * .24, y: bounds.height * .067 } });
   await expect(preview.locator('#preview-label')).toHaveText('見出し · OCR');
   await expect(preview.locator('#preview-text')).toHaveText('Sample Document');
+  await expect(preview.getByRole('status')).toBeHidden();
+  const legend = preview.getByRole('list', { name: '検出ラベルの凡例' });
+  await expect(legend).toBeVisible();
+  const currentBounds = await overlay.boundingBox();
+  expect((await legend.boundingBox()).y).toBeGreaterThanOrEqual(currentBounds.y + currentBounds.height);
   await preview.screenshot({ path: info.outputPath('pdf-preview.png') });
-  const rubyRegion = preview.getByRole('option', { name: /ルビ · とし[ょよ]かん/ });
-  await preview.getByRole('combobox', { name: '検出領域' }).selectOption({ label: await rubyRegion.textContent() });
+  await overlay.hover({ position: { x: bounds.width * .124, y: bounds.height * .2 } });
   await expect(preview.locator('#preview-text')).toHaveText(/とし[ょよ]かん/);
-  const markdown = unzipSync(await download(page, 'Markdown ＋ 画像', info.outputPath('sample-markdown.zip')));
+  const frames = preview.getByRole('group', { name: '検出枠' });
+  await frames.press('ArrowDown');
+  await expect(preview.locator('#preview-tooltip')).toBeVisible();
+  await frames.press('Escape');
+  await expect(preview.locator('#preview-tooltip')).toBeHidden();
+  const markdown = unzipSync(await download(page, 'Markdown（画像あり）', info.outputPath('sample-markdown.zip')));
   const document = strFromU8(markdown['document.md']);
   expect(document).toContain('Sample Document');
   expect(document.match(/8642/g)).toHaveLength(1);
@@ -148,16 +159,20 @@ test('文字レイヤーとOCRの両方で柱とページ番号を除き、本�
   expect(document).not.toMatch(/とし[ょよ]かん/);
   expect(document.match(/Figure 1\./g)).toHaveLength(2);
   expect(document).toMatch(/\|\s*Material\s*\||<table>/i);
+  const plain = (await download(page, 'Markdown', info.outputPath('sample.md'))).toString();
+  expect(plain).toContain('Figure 1. Mountain landscape');
+  expect(plain).toMatch(/\|\s*Material\s*\||<table>/i);
+  expect(plain).not.toMatch(/!\[|images\/|とし[ょよ]かん/);
+  expect(Object.keys(markdown).some(file => file.endsWith('.png'))).toBe(true);
   expect(modelRequests.length).toBeGreaterThan(0);
   expect(modelRequests.some(url => /\/models\/table-/.test(url))).toBe(false);
   modelRequests.length = 0;
   await page.reload();
   await expect(preferText).toBeChecked();
   await includeRuby.check();
-  await page.getByRole('checkbox', { name: 'レイアウト検出にWebGPUを使う（試験的）' }).check();
   await page.locator('input[name="pages"]').fill('1');
   await input.setInputFiles({ name: 'sample.pdf', mimeType: 'application/pdf', buffer: withText });
-  await expect(page.getByRole('link', { name: 'EPUB', exact: true })).toBeVisible({ timeout: 45_000 });
+  await expect(page.getByRole('button', { name: 'EPUB', exact: true })).toBeVisible({ timeout: 45_000 });
   const textEpub = unzipSync(await download(page, 'EPUB', info.outputPath('prefer-pdf-text.epub')));
   const textChapters = Object.entries(textEpub).filter(([name]) => name.includes('/chapter-'))
     .map(([, bytes]) => strFromU8(bytes)).join('');
@@ -174,7 +189,7 @@ test('文字レイヤーとOCRの両方で柱とページ番号を除き、本�
   for (const [caption, image] of figures) {
     expect(Buffer.from(textFigures.get(caption))).toEqual(Buffer.from(image));
   }
-  const textMarkdown = unzipSync(await download(page, 'Markdown ＋ 画像', info.outputPath('prefer-pdf-text-markdown.zip')));
+  const textMarkdown = unzipSync(await download(page, 'Markdown（画像あり）', info.outputPath('prefer-pdf-text-markdown.zip')));
   const textDocument = strFromU8(textMarkdown['document.md']);
   expect(textDocument).toMatch(/図書館（とし[ょよ]かん）/);
   expect(textDocument).toContain('Unclassified margin note.');
@@ -211,16 +226,18 @@ test('121ページのPDFで表示中の1ページだけを描画する', async (
   await expect(number).toHaveValue('120');
   await expect(image).toBeVisible();
   expect(await image.evaluate(canvas => canvas.width / canvas.height)).toBeLessThan(1);
-  await expect(page.getByRole('link', { name: 'EPUB', exact: true })).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByRole('button', { name: 'EPUB', exact: true })).toBeVisible({ timeout: 60_000 });
   await number.fill('1');
   await number.press('Enter');
-  await expect(preview.getByRole('status')).toContainText('解析済み');
+  const legend = preview.getByRole('list', { name: '検出ラベルの凡例' });
+  await expect(legend).toBeVisible();
+  await expect(preview.getByRole('status')).toBeHidden();
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
   await preview.screenshot({ path: info.outputPath('pdf-preview-mobile.png') });
   await expect(preview.getByRole('checkbox', { name: '解析枠を表示' })).toBeChecked();
   await preview.getByRole('checkbox', { name: '解析枠を表示' }).uncheck();
-  await expect(preview.getByLabel('検出領域', { exact: true })).toBeHidden();
+  await expect(legend).toBeHidden();
 });
 
 test('スマートフォン幅でPDFの選択とエラーが表示される', async ({ page }, info) => {

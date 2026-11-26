@@ -11,11 +11,13 @@ const details = byId('details');
 const results = byId('results');
 const alert = byId('error');
 const actions = byId('downloads');
+const downloadStatus = byId('download-status');
 const titleField = byId('file-name');
 const assets = new URL('./', document.baseURI);
 let active;
 let preview;
-let downloadUrls = [];
+let converted;
+const downloadUrls = new Set();
 
 function setProgress(message, detail = '', value, total) {
   status.textContent = message;
@@ -27,24 +29,72 @@ function setProgress(message, detail = '', value, total) {
 }
 
 function discardDownloads() {
+  converted = undefined;
   for (const url of downloadUrls) URL.revokeObjectURL(url);
-  downloadUrls = [];
+  downloadUrls.clear();
   results.hidden = true;
-  actions.replaceChildren();
+  downloadStatus.hidden = true;
+  actions.removeAttribute('aria-busy');
+  for (const button of actions.children) button.removeAttribute('aria-disabled');
 }
 
-function addDownload(name, label, data, type) {
+function saveDownload(name, data, type) {
   const link = document.createElement('a');
   const url = URL.createObjectURL(new Blob([data], { type }));
-  downloadUrls.push(url);
-  link.className = 'button primary';
+  downloadUrls.add(url);
   link.href = url;
   link.download = name;
-  link.textContent = label;
-  actions.append(link);
+  link.hidden = true;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => {
+    if (downloadUrls.delete(url)) URL.revokeObjectURL(url);
+  }, 60_000);
 }
 
-function processImage(worker, image, layer, { tables, includeRuby, useGpu, signal, page, index, total }) {
+async function download(format) {
+  const book = converted;
+  if (!book || book.exporting) return;
+  const { title, basename, pages } = book;
+  book.exporting = true;
+  actions.setAttribute('aria-busy', 'true');
+  for (const button of actions.children) button.setAttribute('aria-disabled', 'true');
+  downloadStatus.textContent = 'ファイルを準備しています…';
+  downloadStatus.hidden = false;
+  try {
+    const { createEpub, createMarkdown } = await import('./exports.js');
+    if (converted !== book) return;
+    let name, data, type;
+    if (format === 'epub') {
+      const rawText = pages.flatMap(page => page.blocks.flatMap(block => block.lines ?? []))
+        .map(line => line.inline.map(part => part.text).join('')).join('');
+      const language = !rawText || /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(rawText) ? 'ja' : 'en';
+      const vertical = pages.filter(page => page.vertical).length > pages.length / 2;
+      data = await createEpub(title, pages, language, vertical);
+      name = basename + '.epub';
+      type = 'application/epub+zip';
+    } else {
+      const includeImages = format === 'markdown-images';
+      data = await createMarkdown(title, pages, { includeImages });
+      name = basename + (includeImages ? '-markdown.zip' : '.md');
+      type = includeImages ? 'application/zip' : 'text/markdown;charset=utf-8';
+    }
+    if (converted !== book) return;
+    saveDownload(name, data, type);
+    downloadStatus.hidden = true;
+  } catch {
+    if (converted === book) downloadStatus.textContent = 'ファイルを書き出せませんでした。もう一度お試しください。';
+  } finally {
+    if (converted === book) {
+      book.exporting = false;
+      actions.removeAttribute('aria-busy');
+      for (const button of actions.children) button.removeAttribute('aria-disabled');
+    }
+  }
+}
+
+function processImage(worker, image, layer, { includeRuby, signal, page, index, total }) {
   return new Promise((resolve, reject) => {
     const clean = () => {
       worker.removeEventListener('message', receive);
@@ -73,7 +123,7 @@ function processImage(worker, image, layer, { tables, includeRuby, useGpu, signa
     worker.addEventListener('error', fail);
     signal.addEventListener('abort', cancel, { once: true });
     setProgress(`${page}ページ目を読み取っています…`, `${index + 1} / ${total} ページ`, index, total);
-    worker.postMessage({ image, layer, tables, includeRuby, useGpu, assets: assets.href }, [image]);
+    worker.postMessage({ image, layer, includeRuby, assets: assets.href }, [image]);
   });
 }
 
@@ -90,11 +140,8 @@ async function convert(file) {
   const { signal } = controller;
   active = controller;
   const settings = new FormData(form);
-  const markdown = settings.get('format') !== 'epub';
-  const epub = settings.get('format') !== 'markdown';
   const preferPdfText = settings.has('prefer-pdf-text');
   const includeRuby = settings.has('include-ruby');
-  const useGpu = settings.has('webgpu');
   byId('choose').disabled = true;
   byId('settings').disabled = true;
   titleField.textContent = file.name;
@@ -109,8 +156,8 @@ async function convert(file) {
     if (!globalThis.OffscreenCanvas || !globalThis.Worker || !globalThis.crypto?.subtle) {
       throw new Error('お使いのブラウザでは端末内OCRを実行できません。');
     }
-    const [{ openPdf, pageNumbers, renderPage }, { createEpub, createMarkdown }, { PdfPreview }] = await Promise.all([
-      import('./pdf.js'), import('./exports.js'), import('./preview.js'),
+    const [{ openPdf, pageNumbers, renderPage }, { PdfPreview }] = await Promise.all([
+      import('./pdf.js'), import('./preview.js'),
     ]);
     const bytes = new Uint8Array(await file.arrayBuffer());
     signal.throwIfAborted();
@@ -142,7 +189,7 @@ async function convert(file) {
       if (!prepared.result) throw prepared.error;
       const { image, layer } = prepared.result;
       const ocr = processImage(worker, image, layer, {
-        tables: markdown, includeRuby, useGpu, signal, page: number, index, total: numbers.length,
+        includeRuby, signal, page: number, index, total: numbers.length,
       });
       if (index + 1 < numbers.length && !signal.aborted) pendingPage = preparePage(numbers[index + 1]);
       const { preview: layout, ...page } = await ocr;
@@ -151,20 +198,11 @@ async function convert(file) {
     }
     worker.terminate();
     if (!pages.some(page => page.blocks.length)) throw new Error('選んだページから文字や図表を読み取れませんでした。');
-    setProgress('ファイルをまとめています…');
-    const rawText = pages.flatMap(page => page.blocks.flatMap(block => block.lines ?? []))
-      .map(line => line.inline.map(part => part.text).join('')).join('');
-    const language = !rawText || /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(rawText) ? 'ja' : 'en';
-    const vertical = pages.filter(page => page.vertical).length > pages.length / 2;
-    const md = markdown ? await createMarkdown(title, pages) : null;
-    const book = epub ? await createEpub(title, pages, language, vertical) : null;
     signal.throwIfAborted();
-    if (md?.bundle) addDownload(basename + '-markdown.zip', 'Markdown ＋ 画像', md.bundle, 'application/zip');
-    else if (md) addDownload(basename + '.md', 'Markdown', md.text, 'text/markdown;charset=utf-8');
-    if (book) addDownload(basename + '.epub', 'EPUB', book, 'application/epub+zip');
+    converted = { title, basename, pages, exporting: false };
     const fallback = pages.reduce((sum, page) => sum + page.tableFallbacks, 0);
     byId('result-details').textContent = `${numbers.length}ページを変換しました。` +
-      (fallback ? ` 表のうち${fallback}件はMarkdownにも画像で収録しました。` : '');
+      (fallback ? ` 構造化できなかった表 ${fallback} 件は画像付きの形式で保存できます。` : '');
     results.hidden = false;
     actions.firstElementChild?.focus();
   } catch (error) {
@@ -189,6 +227,10 @@ async function convert(file) {
   }
 }
 
+actions.addEventListener('click', event => {
+  const format = event.target.closest('button')?.dataset.format;
+  if (format) void download(format);
+});
 byId('choose').addEventListener('click', () => input.click());
 byId('cancel').addEventListener('click', () => {
   active?.abort();

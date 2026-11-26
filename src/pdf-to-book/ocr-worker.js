@@ -1,7 +1,7 @@
 import { OCRModels, isVertical } from './ocr-models.js';
 import {
   arrangePage, attachRuby, buildTable, center, charactersOf, contains, frame, height, inPageFurniture,
-  overlap, width, withoutPageFurniture,
+  overlap, readingOrder, width, withoutPageFurniture,
 } from './layout.js';
 
 let models;
@@ -130,7 +130,7 @@ function duplicateLines(lines, ruby) {
   return kept;
 }
 
-async function processPage(page, layer, { structuredTables, includeRuby }) {
+async function processPage(page, layer, includeRuby) {
   const detections = await models.detect(page);
   const excludedRegions = detections.filter(({ label, score }) => pageFurnitureLabels.has(label) && score >= .4);
   const pageFurniture = excludedRegions.map(({ box }) => box);
@@ -163,7 +163,7 @@ async function processPage(page, layer, { structuredTables, includeRuby }) {
   const lines = [];
   for (const region of candidates) {
     const inside = artwork.find(art => contains(art.box, center(region.box)));
-    if (inside && (inside.label !== 15 || !structuredTables)) continue;
+    if (inside && inside.label !== 15) continue;
     const line = await recognize(page, region, regions.get(region), pageFurniture);
     if (line.text) {
       lines.push(line);
@@ -204,17 +204,21 @@ async function processPage(page, layer, { structuredTables, includeRuby }) {
   for (const { box, label } of artwork) {
     const kind = label === 15 ? 'table' : 'figure';
     let table = null;
-    if (kind === 'table' && structuredTables) {
+    let tableText;
+    if (kind === 'table') {
       const cellLines = lines.filter(line => contains(box, center(line.box)));
       table = buildTable(findGridCells(page, box), cellLines);
       if (!table) {
-        try { table = buildTable(await models.tableCells(page, box), cellLines); } catch (error) {
-          if (!/DeformConv|not implemented|kernel/i.test(String(error))) throw error;
-        }
+        const boxes = await models.tableCells(page, box).catch(() => []);
+        table = buildTable(boxes, cellLines);
       }
-      if (!table) tableFallbacks++;
+      if (!table) {
+        const vertical = cellLines.filter(line => line.vertical).length > cellLines.length / 2;
+        tableText = readingOrder(cellLines, vertical).map(line => line.text);
+        tableFallbacks++;
+      }
     }
-    assets.push({ box, kind, image: await crop(page, box), captions: [], table });
+    assets.push({ box, kind, image: await crop(page, box), captions: [], table, tableText });
   }
   if (includeRuby && !mainLines.length && readings.length) mainLines.push(...readings);
   return {
@@ -224,10 +228,10 @@ async function processPage(page, layer, { structuredTables, includeRuby }) {
 }
 
 self.addEventListener('message', async event => {
-  const { image, layer, assets, tables, includeRuby, useGpu } = event.data;
+  const { image, layer, assets, includeRuby } = event.data;
   try {
-    models ??= new OCRModels(assets, progress => self.postMessage({ progress }), useGpu);
-    const result = await processPage(image, layer, { structuredTables: tables, includeRuby });
+    models ??= new OCRModels(assets, progress => self.postMessage({ progress }));
+    const result = await processPage(image, layer, includeRuby);
     const buffers = result.blocks.flatMap(block => block.image ? [block.image.buffer] : []);
     self.postMessage({ result }, buffers);
   } catch (error) {

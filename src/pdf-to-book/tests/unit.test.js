@@ -98,11 +98,16 @@ test('Markdownは結合セルと括弧ルビ、EPUBは表画像とXHTMLルビを
     { kind: 'paragraph', lines: [{ inline: [{ text: '図書館', ruby: 'としょかん' }] }] },
     { kind: 'table', table, caption: [{ inline: [{ text: '表1 概要' }] }], image: Uint8Array.of(1, 2, 3) },
     { kind: 'figure', caption: [], image: Uint8Array.of(4, 5, 6) },
+    { kind: 'table', tableText: ['続きの表の文字'], caption: [], image: Uint8Array.of(7, 8, 9) },
   ] }];
   const markdown = await createMarkdown('資料 & 図表', pages);
-  assert.match(strFromU8(markdown.text), /図書館（としょかん）/);
-  assert.match(strFromU8(markdown.text), /colspan="2">見出し/);
-  assert.deepEqual(unzipSync(markdown.bundle)['images/p1-3.png'], Uint8Array.of(4, 5, 6));
+  assert.match(strFromU8(markdown), /図書館（としょかん）/);
+  assert.match(strFromU8(markdown), /colspan="2">見出し/);
+  assert.match(strFromU8(markdown), /続きの表の文字/);
+  assert.doesNotMatch(strFromU8(markdown), /!\[/);
+  const bundle = unzipSync(await createMarkdown('資料 & 図表', pages, { includeImages: true }));
+  assert.deepEqual(bundle['images/p1-3.png'], Uint8Array.of(4, 5, 6));
+  assert.deepEqual(bundle['images/p1-4.png'], Uint8Array.of(7, 8, 9));
   const epub = await createEpub('資料 & 図表', pages, 'ja', true);
   const header = new DataView(epub.buffer, epub.byteOffset, epub.byteLength);
   assert.equal(header.getUint16(8, true), 0);
